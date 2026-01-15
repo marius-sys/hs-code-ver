@@ -280,3 +280,24 @@ button {
         grid-template-columns: 1fr;
     }
 }
+
+.sanction-warning {
+    background: linear-gradient(135deg, #ff6b6b 0%, #c92a2a 100%);
+    color: white;
+    padding: 15px;
+    border-radius: 10px;
+    margin-top: 20px;
+    border-left: 5px solid #ffd93d;
+    animation: pulse 2s infinite;
+}
+
+.sanction-warning i {
+    margin-right: 10px;
+    font-size: 1.2em;
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(255, 107, 107, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0); }
+}

@@ -26,6 +26,11 @@ class HSCodeVerifier {
         document.getElementById('newBtn').addEventListener('click', () => {
             this.hsCodeInput.value = '';
             this.result.classList.add('hidden');
+            // Usuń ewentualne ostrzeżenia sankcyjne
+            const warning = document.querySelector('.sanction-warning');
+            if (warning) {
+                warning.remove();
+            }
             this.hsCodeInput.focus();
         });
         
@@ -50,11 +55,6 @@ class HSCodeVerifier {
                 if (data.database) {
                     this.dbFormat.textContent = data.database.hasBinding ? 'KV' : 'Brak';
                     this.dbCount.textContent = data.database.totalRecords || '0';
-                    
-                    if (!data.database.hasBinding) {
-                        this.apiStatus.textContent = 'Brak bazy ⚠️';
-                        this.apiStatus.style.color = '#ffc107';
-                    }
                 }
             } else {
                 this.apiStatus.textContent = 'Błąd ✗';
@@ -111,6 +111,23 @@ class HSCodeVerifier {
         } else {
             statusEl.textContent = 'NIEPOPRAWNY';
             statusEl.className = 'invalid';
+        }
+        
+        // Usuń stare ostrzeżenia sankcyjne jeśli istnieją
+        const oldWarning = document.querySelector('.sanction-warning');
+        if (oldWarning) {
+            oldWarning.remove();
+        }
+        
+        // Dodaj ostrzeżenie sankcyjne jeśli dotyczy
+        if (data.sanctioned) {
+            const warning = document.createElement('div');
+            warning.className = 'sanction-warning';
+            warning.innerHTML = `
+                <i class="fas fa-exclamation-triangle"></i>
+                <strong>UWAGA SANKCYJNA:</strong> ${data.sanctionMessage || 'Ten towar podlega ograniczeniom'}
+            `;
+            document.getElementById('result').appendChild(warning);
         }
         
         this.result.classList.remove('hidden');
