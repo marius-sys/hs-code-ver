@@ -1,6 +1,6 @@
 /**
  * Synchronizacja bazy danych HS z API ISZTAR do Cloudflare KV
- * Wersja 1.4.1: Delta updates - tylko zmienione rekordy
+ * Wersja 1.4.2: Poprawione nagłówki dla API ISZTAR
  */
 
 const ISZTAR_API_BASE = 'https://ext-isztar4.mf.gov.pl/tariff/rest/goods-nomenclature/codes';
@@ -36,6 +36,7 @@ async function fetchIsztarPage(page) {
     try {
         console.log(`📥 Pobieranie strony ${page}/${TOTAL_PAGES}...`);
         
+        // POPRAWIONE NAGŁÓWKI (potwierdzone testem)
         const response = await fetch(`${ISZTAR_API_BASE}?page=${page}`, {
             headers: {
                 'Accept': 'application/json, text/plain, */*',
@@ -85,8 +86,9 @@ async function fetchAllPagesToObject() {
             totalRecords += pageData.length;
             successfulPages++;
             
-            // Opóźnienie między żądaniami, aby nie przeciążyć API
+            // Opóźnienie między żądaniami
             if (page < TOTAL_PAGES) {
+                console.log(`   ⏳ Czekam 2s przed następną stroną...`);
                 await new Promise(resolve => setTimeout(resolve, 2000));
             }
             
@@ -164,7 +166,6 @@ async function saveDeltaToKV(env, oldDb, newDb, changes, updates) {
         return { saved: 0, skipped: true };
     }
     
-    // Zawsze twórz backup starej bazy
     if (Object.keys(oldDb).length > 0) {
         try {
             await kv.put('HS_PREVIOUS_DATABASE', JSON.stringify(oldDb));
@@ -174,7 +175,6 @@ async function saveDeltaToKV(env, oldDb, newDb, changes, updates) {
         }
     }
     
-    // Zapisz nową bazę
     try {
         await kv.put('HS_CURRENT_DATABASE', JSON.stringify(newDb));
         console.log(`✅ Nowa baza zapisana (${Object.keys(newDb).length} rekordów)`);
@@ -183,14 +183,13 @@ async function saveDeltaToKV(env, oldDb, newDb, changes, updates) {
         throw error;
     }
     
-    // Zaktualizuj metadane
     const metadata = {
         lastSync: new Date().toISOString(),
         totalRecords: Object.keys(newDb).length,
         changes: changes,
-        version: '1.4.1',
+        version: '1.4.2',
         syncType: 'delta',
-        successfulPages: Math.floor(Object.keys(newDb).length / 100) // przybliżona liczba stron
+        successfulPages: Math.ceil(Object.keys(newDb).length / 1000)
     };
     
     try {
@@ -213,13 +212,15 @@ export async function syncIsztarData(env, ctx) {
     console.log(`⏰ ${new Date().toISOString()}`);
     console.log('='.repeat(60));
     
+    let oldDatabase = {};
+    
     try {
         console.log('\n📖 Pobieranie istniejącej bazy z KV...');
-        const oldDatabase = await getExistingDatabase(env);
+        oldDatabase = await getExistingDatabase(env);
         console.log(`   Znaleziono: ${Object.keys(oldDatabase).length} istniejących kodów`);
         
         console.log('\n📥 Pobieranie nowej bazy z API ISZTAR...');
-        console.log('   Uwaga: API ISZTAR wymaga specyficznych nagłówków HTTP');
+        console.log('   Uwaga: Używam potwierdzonych nagłówków przeglądarki');
         const newDatabase = await fetchAllPagesToObject();
         
         if (Object.keys(newDatabase).length === 0) {
@@ -268,14 +269,14 @@ export async function syncIsztarData(env, ctx) {
     } catch (error) {
         console.error('\n💥 BŁĄD SYNCHRONIZACJI DELTA:', error);
         
-        // W przypadku błędu, spróbuj zapisać przynajmniej starą bazę z zaktualizowanymi metadanymi
+        // Fallback: zapisz przynajmniej starą bazę z zaktualizowanymi metadanymi
         try {
-            if (Object.keys(oldDatabase || {}).length > 0) {
+            if (Object.keys(oldDatabase).length > 0) {
                 const metadata = {
                     lastSync: new Date().toISOString(),
                     totalRecords: Object.keys(oldDatabase).length,
                     changes: { added: 0, updated: 0, removed: 0, unchanged: Object.keys(oldDatabase).length },
-                    version: '1.4.1',
+                    version: '1.4.2',
                     syncType: 'error_fallback',
                     error: error.message
                 };

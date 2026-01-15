@@ -1,6 +1,6 @@
 {
   "name": "hs-code-ver",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "type": "module",
   "scripts": {
     "test-sync": "node scripts/test-sync.js",
