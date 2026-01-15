@@ -1,0 +1,24 @@
+name = "hs-code-verifier-api"
+compatibility_date = "2024-01-01"
+main = "src/index.js"
+compatibility_flags = [ "nodejs_compat" ]
+
+account_id = ""  # BĘDZIE AUTOMATYCZNIE WYPEŁNIONE Z GITHUB SECRETS
+workers_dev = true
+
+[vars]
+ENVIRONMENT = "production"
+VERSION = "1.4.1"
+MAX_REQUESTS_PER_DAY = 20000
+ALLOWED_ORIGINS = "https://marius-sys.github.io/hs-code-ver"
+SYNC_TOKEN = ""  # WYPEŁNI SECRET W CLOUDFLARE
+CRON_SECRET = "" # WYPEŁNI SECRET W CLOUDFLARE
+
+# KV Namespace - UŻYWAMY JUŻ ISTNIEJĄCEGO
+[[kv_namespaces]]
+binding = "HS_DATABASE"
+id = "d4e909bdc6114613ab76635fadb855b2"
+
+# CRON Schedule - codziennie o 3:00 UTC
+[triggers]
+crons = ["0 3 * * *"]

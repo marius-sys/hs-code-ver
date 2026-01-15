@@ -1,0 +1,129 @@
+name: 🚀 Deploy HS Code Verifier v1.4.1
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: 'Wymuś ponowny deploy'
+        required: false
+        default: 'false'
+
+env:
+  NODE_VERSION: '20'
+  WORKER_NAME: 'hs-code-verifier-api'
+  WORKER_URL: 'https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev'
+  KV_ID: 'd4e909bdc6114613ab76635fadb855b2'
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    name: ⚙️ Setup and Install
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: 📦 Install dependencies
+        run: |
+          npm install
+          cd backend
+          npm install
+
+  deploy-backend:
+    runs-on: ubuntu-latest
+    name: ⚡ Deploy Backend Worker
+    needs: setup
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: 📦 Install backend dependencies
+        run: |
+          cd backend
+          npm install
+
+      - name: 🚀 Deploy Worker with Environment Variables
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
+          workingDirectory: 'backend'
+          # Wrangler automatycznie użyje accountId z parametru powyżej
+          # NIE musimy go wpisywać w wrangler.toml
+
+      - name: 📝 Log deployment info
+        run: |
+          echo "✅ Worker został wdrożony!"
+          echo "🌐 URL: ${{ env.WORKER_URL }}"
+          echo "🗄️  KV Namespace ID: ${{ env.KV_ID }}"
+          echo "👤 Account ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
+          echo ""
+          echo "ℹ️  Następne kroki:"
+          echo "1. Dodaj SYNC_TOKEN i CRON_SECRET w Cloudflare Dashboard"
+          echo "2. Uruchom synchronizację: npm run delta-sync"
+          echo "3. Sprawdź: curl ${{ env.WORKER_URL }}/health"
+
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    name: 🎨 Deploy Frontend (GitHub Pages)
+    needs: deploy-backend
+    permissions:
+      contents: write
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Update API URL in frontend
+        run: |
+          sed -i "s|https://hs-code-verifier-api-production.konto-dla-m-w-q4r.workers.dev|https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev|g" frontend/js/app.js
+
+      - name: 🚀 Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./frontend
+          force_orphan: true
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+
+  verify-deployment:
+    runs-on: ubuntu-latest
+    name: ✅ Verify Deployment
+    needs: [deploy-backend, deploy-frontend]
+    
+    steps:
+      - name: 🩺 Health check
+        run: |
+          echo "Sprawdzam zdrowie API..."
+          sleep 10
+          curl -s ${{ env.WORKER_URL }}/health | jq .
+          
+      - name: 📊 Deployment summary
+        run: |
+          echo "🎉 DEPLOYMENT ZAKOŃCZONY!"
+          echo ""
+          echo "📋 LINKI:"
+          echo "• Frontend: https://marius-sys.github.io/hs-code-ver"
+          echo "• Backend API: ${{ env.WORKER_URL }}"
+          echo "• KV Namespace ID: ${{ env.KV_ID }}"
+          echo "• Cloudflare Account ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
+          echo ""
+          echo "🔧 NASTĘPNE KROKI:"
+          echo "1. Dodaj SYNC_TOKEN i CRON_SECRET w Cloudflare Dashboard"
+          echo "2. Uruchom: npm run delta-sync"
+          echo "3. Testuj: curl -X POST ${{ env.WORKER_URL }}/verify -H 'Content-Type: application/json' -d '{\"code\":\"0101\"}'"

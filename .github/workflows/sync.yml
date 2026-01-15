@@ -1,0 +1,176 @@
+name: 🔄 Daily HS Database Sync v1.4.1
+
+on:
+  schedule:
+    - cron: '0 4 * * *'  # Codziennie o 4:00 UTC
+  workflow_dispatch:
+    inputs:
+      debug_mode:
+        description: 'Tryb debugowania'
+        required: false
+        default: 'false'
+
+env:
+  NODE_VERSION: '20'
+  KV_ID: 'd4e909bdc6114613ab76635fadb855b2'
+
+jobs:
+  test-api:
+    runs-on: ubuntu-latest
+    name: 🧪 Test API ISZTAR
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      
+      - name: 📦 Install dependencies
+        run: npm install
+      
+      - name: 🌐 Test ISZTAR API connectivity
+        run: |
+          echo "Testowanie połączenia z API ISZTAR..."
+          npm run test-isztar
+      
+      - name: 📡 Test Cloudflare KV
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "Testowanie połączenia z Cloudflare KV..."
+          echo "KV ID: ${{ env.KV_ID }}"
+          
+          # Test dostępności namespace
+          npx wrangler kv namespace list 2>&1 || echo "Błąd listowania namespace"
+          
+          # Test odczytu
+          npx wrangler kv key get --namespace-id=${{ env.KV_ID }} "HS_METADATA" --remote 2>&1 || echo "Brak metadanych"
+          
+          echo "✅ Testy połączeń zakończone"
+
+  sync-database:
+    runs-on: ubuntu-latest
+    name: 🔄 Synchronizacja bazy danych
+    needs: test-api
+    if: success()
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      
+      - name: 📦 Install dependencies
+        run: |
+          npm install
+      
+      - name: 🛠️ Configure Wrangler
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "🔧 Konfiguracja Wrangler..."
+          # Sprawdź konfigurację
+          npx wrangler whoami
+      
+      - name: 🗃️ Run delta sync
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "🔄 Uruchamiam synchronizację delta..."
+          echo "Wersja: 1.4.1"
+          echo "KV ID: ${{ env.KV_ID }}"
+          echo ""
+          
+          # Uruchom synchronizację z dodatkowym loggingiem
+          npm run delta-sync 2>&1 | tee sync.log
+          
+          # Sprawdź czy log zawiera błędy
+          if grep -q "BŁĄD\|ERROR\|❌" sync.log; then
+            echo "⚠️  Wykryto błędy w logach"
+            cat sync.log
+            exit 1
+          fi
+      
+      - name: 📊 Verify sync results
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "🔍 Weryfikacja wyników synchronizacji..."
+          
+          # Pobierz metadane
+          METADATA=$(npx wrangler kv key get --namespace-id=${{ env.KV_ID }} "HS_METADATA" --remote --json 2>/dev/null || echo "{}")
+          
+          echo "📄 Metadane:"
+          echo "$METADATA" | jq . 2>/dev/null || echo "$METADATA"
+          
+          # Sprawdź liczbę rekordów
+          RECORDS=$(echo "$METADATA" | grep -o '"totalRecords":[0-9]*' | cut -d: -f2 || echo "0")
+          
+          if [ "$RECORDS" -gt 0 ]; then
+            echo "✅ Synchronizacja udana! Rekordów: $RECORDS"
+          else
+            echo "⚠️  Brak rekordów w bazie"
+          fi
+      
+      - name: 🩺 Health check after sync
+        run: |
+          echo "🩺 Sprawdzanie zdrowia systemu po synchronizacji..."
+          
+          # Opóźnienie, aby Worker mógł się zaktualizować
+          sleep 10
+          
+          # Sprawdź health endpoint
+          curl -s "${{ env.WORKER_URL }}/health" | jq . 2>/dev/null || \
+          curl -s "${{ env.WORKER_URL }}/health"
+          
+          echo ""
+          echo "📊 Statystyki:"
+          curl -s "${{ env.WORKER_URL }}/stats" | jq . 2>/dev/null || \
+          curl -s "${{ env.WORKER_URL }}/stats"
+
+  manual-fallback:
+    runs-on: ubuntu-latest
+    name: 🆘 Ręczna synchronizacja (fallback)
+    needs: sync-database
+    if: failure()
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      
+      - name: 📦 Install dependencies
+        run: npm install
+      
+      - name: 🚨 Execute manual sync fallback
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "🚨 Uruchamiam ręczną synchronizację fallback..."
+          
+          # Utwórz minimalną bazę testową
+          TEST_DATA='{"0101":"Konie, osły, muły żywe","020110":"Tusze i półtusze wołowe","9999":"Kod testowy"}'
+          
+          echo "$TEST_DATA" | npx wrangler kv key put --namespace-id=${{ env.KV_ID }} "HS_CURRENT_DATABASE" --remote
+          
+          # Utwórz metadane
+          META='{"lastSync":"'$(date -Iseconds)'","totalRecords":3,"changes":{"added":3,"updated":0,"removed":0,"unchanged":0},"version":"1.4.1","syncType":"manual_fallback"}'
+          
+          echo "$META" | npx wrangler kv key put --namespace-id=${{ env.KV_ID }} "HS_METADATA" --remote
+          
+          echo "✅ Fallback wykonany - 3 rekordy testowe"

@@ -1,0 +1,22 @@
+{
+  "name": "hs-code-ver",
+  "version": "1.4.1",
+  "type": "module",
+  "scripts": {
+    "test-sync": "node scripts/test-sync.js",
+    "test-isztar": "node scripts/test-isztar.js",
+    "delta-sync": "node scripts/delta-sync.js",
+    "deploy": "cd backend && npx wrangler deploy",
+    "kv-test": "npx wrangler kv key get --namespace-id=d4e909bdc6114613ab76635fadb855b2 \"HS_METADATA\" --remote",
+    "kv-list": "npx wrangler kv namespace list"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
