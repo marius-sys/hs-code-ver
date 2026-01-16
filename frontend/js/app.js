@@ -135,10 +135,13 @@ class HSCodeVerifier {
         
         const statusEl = document.getElementById('result-status');
         
+        // NOWA LOGIKA:
         if (data.isGeneralCode) {
+            // Tylko prawdziwe kody ogólne z wieloma podkodami
             statusEl.textContent = 'KOD OGÓLNY';
             statusEl.className = 'general';
         } else if (data.isValid) {
+            // Poprawne kody (dokładne dopasowanie lub rozszerzone z jednym podkodem)
             statusEl.textContent = 'POPRAWNY';
             statusEl.className = 'valid';
         } else {
@@ -146,18 +149,21 @@ class HSCodeVerifier {
             statusEl.className = 'invalid';
         }
         
-        if (data.isSingleSubcode && data.originalCode) {
+        // Obsługa rozszerzonych kodów
+        if ((data.isSingleSubcode || data.isPrefixMatch) && data.originalCode) {
             this.extendedCodeSpan.textContent = `${data.originalCode} → ${data.code}`;
             this.extendedCodeInfo.classList.remove('hidden');
         } else {
             this.extendedCodeInfo.classList.add('hidden');
         }
         
+        // Usuń stare ostrzeżenia sankcyjne jeśli istnieją
         const oldWarning = document.querySelector('.sanction-warning');
         if (oldWarning) {
             oldWarning.remove();
         }
         
+        // Dodaj ostrzeżenie sankcyjne jeśli dotyczy
         if (data.sanctioned) {
             console.log('Wyświetlam ostrzeżenie sankcyjne dla kodu:', data.code);
             
@@ -168,11 +174,14 @@ class HSCodeVerifier {
                 <strong>${data.sanctionMessage || 'UWAGA: Towar sankcyjny!'}</strong>
             `;
             
+            // Dodaj ostrzeżenie do karty wyników
             const resultCard = document.getElementById('result');
             resultCard.appendChild(warning);
             
+            // Dodaj też klasę do karty wyników dla dodatkowego stylu
             resultCard.classList.add('has-sanction');
         } else {
+            // Usuń klasę jeśli nie ma sankcji
             document.getElementById('result').classList.remove('has-sanction');
         }
         

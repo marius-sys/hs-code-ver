@@ -135,7 +135,7 @@ async function verifyHSCode(code, env) {
     // 3. Znajdź kody, które są prefiksami cleanedCode (kody ogólne)
     const generalCodes = Object.keys(database)
       .filter(k => cleanedCode.startsWith(k))
-      .sort((a, b) => b.length - a.length); // sortuj malejąco po długości
+      .sort((a, b) => b.length - a.length);
     
     // 4. Jeśli znaleziono dokładnie jeden kod szczegółowy
     if (detailedCodes.length === 1) {
@@ -151,7 +151,6 @@ async function verifyHSCode(code, env) {
         description: database[singleCode],
         source: 'isztar_delta_database',
         isValid: true,
-        isGeneralCode: true,
         isSingleSubcode: true,
         sanctioned: isSanctioned,
         sanctionMessage: isSanctioned ? 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!' : null
@@ -178,25 +177,44 @@ async function verifyHSCode(code, env) {
     
     // 6. Jeśli znaleziono kody ogólne (prefiksy)
     if (generalCodes.length > 0) {
-      // Weź najdłuższy prefiks (najbardziej szczegółowy kod ogólny)
       const longestPrefix = generalCodes[0];
-      const paddedCode = cleanedCode.padEnd(10, '0');
       
+      const subcodesOfPrefix = Object.keys(database)
+        .filter(k => k.startsWith(longestPrefix))
+        .sort();
+      
+      const paddedCode = cleanedCode.padEnd(10, '0');
       const isSanctioned = await checkIfSanctioned(paddedCode, env);
       
-      return {
-        success: true,
-        code: paddedCode,
-        originalCode: cleanedCode,
-        description: database[longestPrefix],
-        source: 'isztar_delta_database',
-        isValid: true,
-        isGeneralCode: true,
-        isPrefixMatch: true,
-        matchedPrefix: longestPrefix,
-        sanctioned: isSanctioned,
-        sanctionMessage: isSanctioned ? 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!' : null
-      };
+      if (subcodesOfPrefix.length === 1) {
+        return {
+          success: true,
+          code: paddedCode,
+          originalCode: cleanedCode,
+          description: database[longestPrefix],
+          source: 'isztar_delta_database',
+          isValid: true,
+          isPrefixMatch: true,
+          matchedPrefix: longestPrefix,
+          sanctioned: isSanctioned,
+          sanctionMessage: isSanctioned ? 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!' : null
+        };
+      } else {
+        return {
+          success: true,
+          code: cleanedCode,
+          description: `Kod ogólny, zawiera ${subcodesOfPrefix.length} podkodów`,
+          details: subcodesOfPrefix.slice(0, 10),
+          totalSubcodes: subcodesOfPrefix.length,
+          source: 'isztar_delta_database',
+          isValid: true,
+          isGeneralCode: true,
+          isPrefixMatch: true,
+          matchedPrefix: longestPrefix,
+          sanctioned: isSanctioned,
+          sanctionMessage: isSanctioned ? 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!' : null
+        };
+      }
     }
     
     // 7. Jeśli nie znaleziono żadnego pasującego kodu
