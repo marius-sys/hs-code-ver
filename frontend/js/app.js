@@ -12,8 +12,10 @@ class HSCodeVerifier {
         this.apiStatus = document.getElementById('api-status');
         this.dbFormat = document.getElementById('db-format');
         this.dbCount = document.getElementById('db-count');
+        this.lastUpdate = document.getElementById('last-update');
         this.extendedCodeInfo = document.getElementById('extended-code-info');
         this.extendedCodeSpan = document.getElementById('extended-code');
+        this.sanctionWarningTop = document.getElementById('sanction-warning-top');
         
         this.bindEvents();
         this.checkAPI();
@@ -33,11 +35,7 @@ class HSCodeVerifier {
             this.hsCodeInput.value = '';
             this.result.classList.add('hidden');
             this.extendedCodeInfo.classList.add('hidden');
-            
-            const warning = document.querySelector('.sanction-warning');
-            if (warning) {
-                warning.remove();
-            }
+            this.sanctionWarningTop.classList.add('hidden');
             this.hsCodeInput.focus();
         });
         
@@ -79,6 +77,7 @@ class HSCodeVerifier {
                 if (data.database) {
                     this.dbFormat.textContent = data.database.hasBinding ? 'KV' : 'Brak';
                     this.dbCount.textContent = data.database.totalRecords || '0';
+                    this.lastUpdate.textContent = data.database.lastSync || 'Nieznana';
                 }
             } else {
                 this.apiStatus.textContent = 'Błąd ✗';
@@ -135,13 +134,10 @@ class HSCodeVerifier {
         
         const statusEl = document.getElementById('result-status');
         
-        // NOWA LOGIKA:
         if (data.isGeneralCode) {
-            // Tylko prawdziwe kody ogólne z wieloma podkodami
             statusEl.textContent = 'KOD OGÓLNY';
             statusEl.className = 'general';
         } else if (data.isValid) {
-            // Poprawne kody (dokładne dopasowanie lub rozszerzone z jednym podkodem)
             statusEl.textContent = 'POPRAWNY';
             statusEl.className = 'valid';
         } else {
@@ -149,7 +145,6 @@ class HSCodeVerifier {
             statusEl.className = 'invalid';
         }
         
-        // Obsługa rozszerzonych kodów
         if ((data.isSingleSubcode || data.isPrefixMatch) && data.originalCode) {
             this.extendedCodeSpan.textContent = `${data.originalCode} → ${data.code}`;
             this.extendedCodeInfo.classList.remove('hidden');
@@ -157,32 +152,14 @@ class HSCodeVerifier {
             this.extendedCodeInfo.classList.add('hidden');
         }
         
-        // Usuń stare ostrzeżenia sankcyjne jeśli istnieją
-        const oldWarning = document.querySelector('.sanction-warning');
-        if (oldWarning) {
-            oldWarning.remove();
-        }
-        
-        // Dodaj ostrzeżenie sankcyjne jeśli dotyczy
         if (data.sanctioned) {
             console.log('Wyświetlam ostrzeżenie sankcyjne dla kodu:', data.code);
-            
-            const warning = document.createElement('div');
-            warning.className = 'sanction-warning';
-            warning.innerHTML = `
-                <i class="fas fa-exclamation-triangle"></i>
-                <strong>${data.sanctionMessage || 'UWAGA: Towar sankcyjny!'}</strong>
-            `;
-            
-            // Dodaj ostrzeżenie do karty wyników
-            const resultCard = document.getElementById('result');
-            resultCard.appendChild(warning);
-            
-            // Dodaj też klasę do karty wyników dla dodatkowego stylu
-            resultCard.classList.add('has-sanction');
+            this.sanctionWarningTop.classList.remove('hidden');
+            if (data.sanctionMessage) {
+                document.getElementById('sanction-message').textContent = data.sanctionMessage;
+            }
         } else {
-            // Usuń klasę jeśli nie ma sankcji
-            document.getElementById('result').classList.remove('has-sanction');
+            this.sanctionWarningTop.classList.add('hidden');
         }
         
         this.result.classList.remove('hidden');

@@ -17,7 +17,7 @@
     <div class="container">
         <header class="header">
             <div class="logo">
-                <i class="fas fa-search"></i>
+                <img src="logo.svg" alt="Q4Rail Logo" class="logo-image">
                 <h1>Q4Rail HS Code Verifier</h1>
             </div>
             <p class="subtitle">Profesjonalna weryfikacja kodów celnych dla logistyki międzynarodowej</p>
@@ -52,6 +52,18 @@
 
             <div id="result" class="card hidden">
                 <h2><i class="fas fa-clipboard-check"></i> Wynik weryfikacji</h2>
+                
+                <!-- Ostrzeżenie sankcyjne na górze -->
+                <div id="sanction-warning-top" class="sanction-warning-top hidden">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <div>
+                        <strong id="sanction-message">UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!</strong>
+                        <p style="margin-top: 8px; font-size: 0.9rem; font-weight: normal;">
+                            Ten kod HS podlega specjalnym regulacjom i ograniczeniom w handlu międzynarodowym.
+                        </p>
+                    </div>
+                </div>
+                
                 <div class="result-item">
                     <strong>Kod HS:</strong> 
                     <span id="result-code" style="font-family: 'Courier New', monospace; font-weight: bold; font-size: 1.2rem; margin-left: 10px;"></span>
@@ -100,7 +112,7 @@
         </main>
 
         <footer class="footer">
-            <p><strong>Q4Rail Sp. z o.o.</strong> &copy; 2024 | Weryfikator Kodów HS v1.4.3</p>
+            <p><strong>Q4Rail Sp. z o.o.</strong> &copy; 2026 | Weryfikator Kodów HS v1.4.3</p>
             <p>Status systemu: <span id="api-status">Sprawdzanie połączenia...</span></p>
             <p class="version">
                 Baza: <span id="db-format">ISZTAR Delta</span> | 

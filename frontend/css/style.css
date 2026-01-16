@@ -61,10 +61,10 @@ body {
     margin-bottom: 1.2rem;
 }
 
-.logo i {
-    font-size: 3rem;
-    color: var(--q4r-accent);
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+.logo-image {
+    height: 60px;
+    width: auto;
+    filter: brightness(0) invert(1) drop-shadow(0 2px 4px rgba(0,0,0,0.2));
 }
 
 .logo h1 {
@@ -326,12 +326,12 @@ input::placeholder {
     font-size: 1rem;
 }
 
-.sanction-warning {
+.sanction-warning-top {
     background: linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%);
     color: #856404;
     padding: 1.5rem;
     border-radius: 10px;
-    margin-top: 2rem;
+    margin: 1rem 0 2rem 0;
     border-left: 6px solid var(--q4r-warning);
     animation: pulse 2s infinite;
     display: flex;
@@ -341,7 +341,7 @@ input::placeholder {
     box-shadow: 0 5px 15px rgba(255, 193, 7, 0.2);
 }
 
-.sanction-warning i {
+.sanction-warning-top i {
     color: #ff9800;
     font-size: 1.8rem;
     min-width: 40px;
@@ -443,8 +443,8 @@ input::placeholder {
         font-size: 2rem;
     }
     
-    .logo i {
-        font-size: 2.5rem;
+    .logo-image {
+        height: 50px;
     }
     
     .subtitle {
