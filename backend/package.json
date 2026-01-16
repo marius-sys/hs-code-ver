@@ -1,16 +1,12 @@
 {
   "name": "hs-code-verifier-backend",
-  "version": "1.4.2",
+  "version": "1.4.3",  // ZMIANA: 1.4.2 → 1.4.3
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "sync": "node ../scripts/delta-sync.js"
+    "deploy": "wrangler deploy"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
-  },
-  "engines": {
-    "node": ">=20.0.0"
   }
 }

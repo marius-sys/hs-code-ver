@@ -8,12 +8,12 @@ workers_dev = true
 
 [vars]
 ENVIRONMENT = "production"
-VERSION = "1.4.2"
+VERSION = "1.4.3"  # ZMIANA: 1.4.2 → 1.4.3
 MAX_REQUESTS_PER_DAY = 20000
 ALLOWED_ORIGINS = "https://marius-sys.github.io"
 SYNC_TOKEN = ""  # WYPEŁNIĆ W CLOUDFLARE
 CRON_SECRET = "" # WYPEŁNIĆ W CLOUDFLARE
-# SANCTIONED_CODES = "2204,2701,2710,7201,8703,9401"  # Przykładowe kody 4-cyfrowe
+SANCTIONED_CODES = ""  # Kody 4-cyfrowe oddzielone przecinkami
 
 [[kv_namespaces]]
 binding = "HS_DATABASE"

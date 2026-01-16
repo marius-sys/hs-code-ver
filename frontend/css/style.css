@@ -1,3 +1,97 @@
+/* Dodaj te style do istniejącego pliku */
+
+.format-info {
+    font-size: 0.9rem;
+    opacity: 0.8;
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.format-info i {
+    color: var(--primary);
+}
+
+.info-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.info-card {
+    background: var(--white);
+    border-radius: 10px;
+    padding: 15px;
+    text-align: center;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+    transition: transform 0.3s;
+}
+
+.info-card:hover {
+    transform: translateY(-5px);
+}
+
+.info-card i {
+    font-size: 2rem;
+    color: var(--primary);
+    margin-bottom: 10px;
+}
+
+.info-card h3 {
+    font-size: 1rem;
+    margin-bottom: 5px;
+}
+
+.info-card p {
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
+/* Style dla rozszerzonego kodu */
+#extended-code-info {
+    background-color: rgba(255, 193, 7, 0.1);
+    border-radius: 8px;
+    padding: 10px;
+    margin-top: 10px;
+    border-left: 4px solid #ffc107;
+}
+
+#extended-code {
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    color: var(--primary);
+}
+
+/* Dodatkowe style dla inputu */
+input::placeholder {
+    color: #999;
+    font-size: 0.95rem;
+}
+
+.examples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-top: 10px;
+}
+
+.btn-example {
+    background: #e9ecef;
+    color: #495057;
+    border: 1px solid #dee2e6;
+    padding: 6px 12px;
+    font-size: 0.85rem;
+}
+
+.btn-example:hover {
+    background: #dee2e6;
+}
+
+/* Reszta istniejących styli pozostaje bez zmian */
 :root {
     --primary: #ff6c3e;
     --primary-dark: #e55a2e;
@@ -59,7 +153,6 @@ body {
 .subtitle {
     opacity: 0.9;
     font-size: 1.1rem;
-    color: #bdc3c7;
 }
 
 .main {
@@ -72,14 +165,6 @@ body {
     padding: 25px;
     margin-bottom: 20px;
     box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-}
-
-.card h2 {
-    color: var(--secondary);
-    margin-bottom: 20px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
 }
 
 .input-group {
@@ -97,11 +182,6 @@ input {
     font-family: 'Courier New', monospace;
 }
 
-input:focus {
-    outline: none;
-    border-color: var(--primary);
-}
-
 button {
     padding: 15px 25px;
     border: none;
@@ -110,9 +190,6 @@ button {
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s;
-    display: flex;
-    align-items: center;
-    gap: 10px;
 }
 
 .btn-primary {
@@ -122,37 +199,6 @@ button {
 
 .btn-primary:hover {
     background: var(--primary-dark);
-    transform: translateY(-2px);
-}
-
-.btn-secondary {
-    background: var(--secondary);
-    color: white;
-    margin-top: 20px;
-}
-
-.btn-secondary:hover {
-    opacity: 0.9;
-}
-
-.btn-example {
-    background: var(--white);
-    color: var(--primary);
-    border: 1px solid var(--primary);
-    padding: 8px 15px;
-    font-size: 0.9rem;
-}
-
-.btn-example:hover {
-    background: var(--primary);
-    color: white;
-}
-
-.examples {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    margin-top: 15px;
 }
 
 .loading {
@@ -180,10 +226,6 @@ button {
     border-bottom: 1px solid #eee;
 }
 
-.result-item:last-child {
-    border-bottom: none;
-}
-
 #result-status {
     padding: 5px 15px;
     border-radius: 20px;
@@ -205,82 +247,11 @@ button {
     color: var(--info);
 }
 
-.info-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 20px;
-    margin-top: 30px;
-}
-
-.info-card {
-    background: white;
-    padding: 25px;
-    border-radius: 15px;
-    text-align: center;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-    transition: transform 0.3s;
-    border-top: 4px solid var(--primary);
-}
-
-.info-card:hover {
-    transform: translateY(-5px);
-}
-
-.info-card i {
-    font-size: 2.5rem;
-    color: var(--primary);
-    margin-bottom: 15px;
-}
-
-.info-card h3 {
-    color: var(--secondary);
-    margin-bottom: 10px;
-}
-
-.info-card p {
-    color: #666;
-    font-size: 0.9rem;
-}
-
-.footer {
-    background: var(--secondary);
-    color: white;
-    padding: 25px;
-    text-align: center;
-    margin-top: 30px;
-}
-
-.footer p {
-    margin: 10px 0;
-}
-
-.version {
-    font-size: 0.9rem;
-    color: #bdc3c7;
-}
-
-#api-status {
-    font-weight: bold;
-}
-
 .hidden {
     display: none !important;
 }
 
-@media (max-width: 600px) {
-    .input-group {
-        flex-direction: column;
-    }
-    
-    .logo h1 {
-        font-size: 1.8rem;
-    }
-    
-    .info-cards {
-        grid-template-columns: 1fr;
-    }
-}
-
+/* Ostrzeżenia sankcyjne */
 .sanction-warning {
     background: linear-gradient(135deg, #ff6b6b 0%, #c92a2a 100%);
     color: white;
@@ -289,11 +260,13 @@ button {
     margin-top: 20px;
     border-left: 5px solid #ffd93d;
     animation: pulse 2s infinite;
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 .sanction-warning i {
-    margin-right: 10px;
-    font-size: 1.2em;
+    font-size: 1.5rem;
 }
 
 @keyframes pulse {
