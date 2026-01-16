@@ -175,18 +175,44 @@ async function verifyHSCode(code, env) {
       };
     }
     
-    // 6. Jeśli znaleziono kody ogólne (prefiksy)
+    // 6. Jeśli znaleziono kody ogólne (prefiksy) - NIE ustawiamy isGeneralCode!
     if (generalCodes.length > 0) {
       const longestPrefix = generalCodes[0];
       
-      const subcodesOfPrefix = Object.keys(database)
+      // Znajdź WSZYSTKIE kody zaczynające się od tego prefiksu
+      const allCodesWithPrefix = Object.keys(database)
         .filter(k => k.startsWith(longestPrefix))
         .sort();
       
+      // Znajdź tylko te kody, które zaczynają się od cleanedCode
+      const codesStartingWithCleaned = Object.keys(database)
+        .filter(k => k.startsWith(cleanedCode))
+        .sort();
+      
+      // Jeśli cleanedCode jest prefiksem jakichś kodów, to to jest kod ogólny
+      if (codesStartingWithCleaned.length > 0) {
+        const isSanctioned = await checkIfSanctioned(cleanedCode, env);
+        
+        return {
+          success: true,
+          code: cleanedCode,
+          description: `Kod ogólny, zawiera ${codesStartingWithCleaned.length} podkodów`,
+          details: codesStartingWithCleaned.slice(0, 10),
+          totalSubcodes: codesStartingWithCleaned.length,
+          source: 'isztar_delta_database',
+          isValid: true,
+          isGeneralCode: true,
+          sanctioned: isSanctioned,
+          sanctionMessage: isSanctioned ? 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!' : null
+        };
+      }
+      
+      // cleanedCode NIE jest prefiksem żadnego kodu - to znaczy, że jest rozszerzeniem prefiksu
       const paddedCode = cleanedCode.padEnd(10, '0');
       const isSanctioned = await checkIfSanctioned(paddedCode, env);
       
-      if (subcodesOfPrefix.length === 1) {
+      // Jeśli prefiks ma tylko jeden kod, to cleanedCode jest jego rozszerzeniem
+      if (allCodesWithPrefix.length === 1) {
         return {
           success: true,
           code: paddedCode,
@@ -194,27 +220,27 @@ async function verifyHSCode(code, env) {
           description: database[longestPrefix],
           source: 'isztar_delta_database',
           isValid: true,
-          isPrefixMatch: true,
-          matchedPrefix: longestPrefix,
-          sanctioned: isSanctioned,
-          sanctionMessage: isSanctioned ? 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!' : null
-        };
-      } else {
-        return {
-          success: true,
-          code: cleanedCode,
-          description: `Kod ogólny, zawiera ${subcodesOfPrefix.length} podkodów`,
-          details: subcodesOfPrefix.slice(0, 10),
-          totalSubcodes: subcodesOfPrefix.length,
-          source: 'isztar_delta_database',
-          isValid: true,
-          isGeneralCode: true,
-          isPrefixMatch: true,
+          isExtendedFromPrefix: true,
           matchedPrefix: longestPrefix,
           sanctioned: isSanctioned,
           sanctionMessage: isSanctioned ? 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!' : null
         };
       }
+      
+      // Prefiks ma wiele kodów, ale cleanedCode nie jest prefiksem żadnego z nich
+      // To znaczy, że cleanedCode jest "nieznanym" rozszerzeniem
+      return {
+        success: true,
+        code: paddedCode,
+        originalCode: cleanedCode,
+        description: database[longestPrefix],
+        source: 'isztar_delta_database',
+        isValid: true,
+        isExtendedFromPrefix: true,
+        matchedPrefix: longestPrefix,
+        sanctioned: isSanctioned,
+        sanctionMessage: isSanctioned ? 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!' : null
+      };
     }
     
     // 7. Jeśli nie znaleziono żadnego pasującego kodu
