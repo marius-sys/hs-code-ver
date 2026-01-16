@@ -8,7 +8,7 @@ workers_dev = true
 
 [vars]
 ENVIRONMENT = "production"
-VERSION = "1.4.3"  # ZMIANA: 1.4.2 → 1.4.3
+VERSION = "1.4.3"
 MAX_REQUESTS_PER_DAY = 20000
 ALLOWED_ORIGINS = "https://marius-sys.github.io"
 SYNC_TOKEN = ""  # WYPEŁNIĆ W CLOUDFLARE

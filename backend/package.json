@@ -1,6 +1,6 @@
 {
   "name": "hs-code-verifier-backend",
-  "version": "1.4.3",  // ZMIANA: 1.4.2 → 1.4.3
+  "version": "1.4.3",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
