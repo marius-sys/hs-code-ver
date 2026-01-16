@@ -22,12 +22,6 @@ System akceptuje kody w różnych formatach:
 - **1234-56-78** - kod z myślnikami
 - **1234567890** - kod bez separatorów (max 10 cyfr)
 
-## 🔧 Użycie
-
-1. Otwórz: https://marius-sys.github.io/hs-code-ver
-2. Wprowadź kod HS w dowolnym formacie (np. 2204, 2204 10, 2204-10-00)
-3. Sprawdź wynik weryfikacji i ewentualne ostrzeżenia sankcyjne
-
 ## 🚨 System ostrzeżeń sankcyjnych
 
 System sprawdza czy kod HS należy do grupy sankcyjnej. Jeśli kod zaczyna się od kodu 4-cyfrowego z listy sankcyjnej, wyświetlane jest ostrzeżenie.

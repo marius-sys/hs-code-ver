@@ -131,24 +131,29 @@ async function verifyHSCode(code, env) {
       .sort();
     
     if (matchingCodes.length > 0) {
-      if (matchingCodes.length === 1 && cleanedCode.length < 10) {
+      // Rozszerzanie kodów ogólnych z jednym podkodem
+      if (matchingCodes.length === 1) {
         const singleSubcode = matchingCodes[0];
-        const paddedCode = singleSubcode.padEnd(10, '0');
         
-        const isSanctioned = await checkIfSanctioned(paddedCode, env);
-        
-        return {
-          success: true,
-          code: paddedCode,
-          originalCode: cleanedCode,
-          description: database[singleSubcode],
-          source: 'isztar_delta_database',
-          isValid: true,
-          isGeneralCode: true,
-          isSingleSubcode: true,
-          sanctioned: isSanctioned,
-          sanctionMessage: isSanctioned ? 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!' : null
-        };
+        // Jeśli wpisany kod jest krótszy niż znaleziony podkod
+        if (cleanedCode.length < singleSubcode.length) {
+          const paddedCode = singleSubcode.padEnd(10, '0');
+          
+          const isSanctioned = await checkIfSanctioned(paddedCode, env);
+          
+          return {
+            success: true,
+            code: paddedCode,
+            originalCode: cleanedCode,
+            description: database[singleSubcode],
+            source: 'isztar_delta_database',
+            isValid: true,
+            isGeneralCode: true,
+            isSingleSubcode: true,
+            sanctioned: isSanctioned,
+            sanctionMessage: isSanctioned ? 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!' : null
+          };
+        }
       }
       
       const isSanctioned = await checkIfSanctioned(cleanedCode, env);

@@ -84,7 +84,7 @@ class SanctionsManager {
         .filter(line => line && !line.startsWith('#') && /^\d{4}$/.test(line));
       
       console.log(`📄 Załadowano ${lines.length} kodów z pliku: ${filePath}`);
-      return [...new Set(lines)]; // Usuń duplikaty
+      return [...new Set(lines)];
     } catch (error) {
       console.log(`❌ Błąd odczytu pliku ${filePath}:`, error.message);
       return [];
@@ -144,7 +144,6 @@ Komentarze zaczynają się od #.
           allCodes = [...allCodes, ...codes];
         }
         
-        // Usuń duplikaty
         allCodes = [...new Set(allCodes)];
         
         if (allCodes.length === 0) {
@@ -182,7 +181,6 @@ Komentarze zaczynają się od #.
   }
 }
 
-// Uruchomienie
 if (import.meta.url === `file://${process.argv[1]}`) {
   const manager = new SanctionsManager();
   manager.run().catch(console.error);

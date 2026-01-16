@@ -1,97 +1,3 @@
-/* Dodaj te style do istniejącego pliku */
-
-.format-info {
-    font-size: 0.9rem;
-    opacity: 0.8;
-    margin-top: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-}
-
-.format-info i {
-    color: var(--primary);
-}
-
-.info-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 15px;
-    margin-top: 20px;
-}
-
-.info-card {
-    background: var(--white);
-    border-radius: 10px;
-    padding: 15px;
-    text-align: center;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.1);
-    transition: transform 0.3s;
-}
-
-.info-card:hover {
-    transform: translateY(-5px);
-}
-
-.info-card i {
-    font-size: 2rem;
-    color: var(--primary);
-    margin-bottom: 10px;
-}
-
-.info-card h3 {
-    font-size: 1rem;
-    margin-bottom: 5px;
-}
-
-.info-card p {
-    font-size: 0.85rem;
-    opacity: 0.8;
-}
-
-/* Style dla rozszerzonego kodu */
-#extended-code-info {
-    background-color: rgba(255, 193, 7, 0.1);
-    border-radius: 8px;
-    padding: 10px;
-    margin-top: 10px;
-    border-left: 4px solid #ffc107;
-}
-
-#extended-code {
-    font-family: 'Courier New', monospace;
-    font-weight: bold;
-    color: var(--primary);
-}
-
-/* Dodatkowe style dla inputu */
-input::placeholder {
-    color: #999;
-    font-size: 0.95rem;
-}
-
-.examples {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: center;
-    margin-top: 10px;
-}
-
-.btn-example {
-    background: #e9ecef;
-    color: #495057;
-    border: 1px solid #dee2e6;
-    padding: 6px 12px;
-    font-size: 0.85rem;
-}
-
-.btn-example:hover {
-    background: #dee2e6;
-}
-
-/* Reszta istniejących styli pozostaje bez zmian */
 :root {
     --primary: #ff6c3e;
     --primary-dark: #e55a2e;
@@ -153,6 +59,20 @@ body {
 .subtitle {
     opacity: 0.9;
     font-size: 1.1rem;
+}
+
+.format-info {
+    font-size: 0.9rem;
+    opacity: 0.8;
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.format-info i {
+    color: var(--primary);
 }
 
 .main {
@@ -251,7 +171,81 @@ button {
     display: none !important;
 }
 
-/* Ostrzeżenia sankcyjne */
+.info-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.info-card {
+    background: var(--white);
+    border-radius: 10px;
+    padding: 15px;
+    text-align: center;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+    transition: transform 0.3s;
+}
+
+.info-card:hover {
+    transform: translateY(-5px);
+}
+
+.info-card i {
+    font-size: 2rem;
+    color: var(--primary);
+    margin-bottom: 10px;
+}
+
+.info-card h3 {
+    font-size: 1rem;
+    margin-bottom: 5px;
+}
+
+.info-card p {
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
+#extended-code-info {
+    background-color: rgba(255, 193, 7, 0.1);
+    border-radius: 8px;
+    padding: 10px;
+    margin-top: 10px;
+    border-left: 4px solid #ffc107;
+}
+
+#extended-code {
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    color: var(--primary);
+}
+
+input::placeholder {
+    color: #999;
+    font-size: 0.95rem;
+}
+
+.examples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-top: 10px;
+}
+
+.btn-example {
+    background: #e9ecef;
+    color: #495057;
+    border: 1px solid #dee2e6;
+    padding: 6px 12px;
+    font-size: 0.85rem;
+}
+
+.btn-example:hover {
+    background: #dee2e6;
+}
+
 .sanction-warning {
     background: linear-gradient(135deg, #ff6b6b 0%, #c92a2a 100%);
     color: white;

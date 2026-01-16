@@ -25,7 +25,6 @@ class HSCodeVerifier {
             if (e.key === 'Enter') this.verify();
         });
         
-        // Auto-formatowanie podczas wpisywania
         this.hsCodeInput.addEventListener('input', (e) => {
             this.formatInput(e.target);
         });
@@ -35,7 +34,6 @@ class HSCodeVerifier {
             this.result.classList.add('hidden');
             this.extendedCodeInfo.classList.add('hidden');
             
-            // Usuń ewentualne ostrzeżenia sankcyjne
             const warning = document.querySelector('.sanction-warning');
             if (warning) {
                 warning.remove();
@@ -52,14 +50,11 @@ class HSCodeVerifier {
         });
     }
 
-    // Formatowanie inputu (automatyczne dodawanie spacji)
     formatInput(input) {
-        let value = input.value.replace(/[^\d\s\-]/g, ''); // Pozostaw tylko cyfry, spacje i myślniki
-        value = value.replace(/\s+/g, ' ').trim(); // Zastąp wiele spacji jedną
+        let value = input.value.replace(/[^\d\s\-]/g, '');
+        value = value.replace(/\s+/g, ' ').trim();
         
-        // Auto-formatowanie: 1234 56 78 90
         if (value.length > 4 && !value.includes(' ') && !value.includes('-')) {
-            // Jeśli wpisano więcej niż 4 cyfry bez separatorów, dodaj spację
             const parts = [];
             parts.push(value.substring(0, 4));
             if (value.length > 4) parts.push(value.substring(4, 6));
@@ -98,7 +93,6 @@ class HSCodeVerifier {
     async verify() {
         let code = this.hsCodeInput.value.trim();
         
-        // Usuń wszystkie niecyfrowe znaki przed walidacją
         const cleanedCode = code.replace(/[^\d]/g, '');
         
         if (!cleanedCode || cleanedCode.length < 4) {
@@ -114,7 +108,6 @@ class HSCodeVerifier {
         this.showLoading(true);
         
         try {
-            // Wyślij oryginalny kod (backend sam go wyczyści)
             const response = await fetch(`${this.apiBaseUrl}/verify`, {
                 method: 'POST',
                 headers: {
@@ -135,7 +128,6 @@ class HSCodeVerifier {
     }
 
     displayResult(data) {
-        // Debug: sprawdź co przychodzi z API
         console.log('Dane z API:', data);
         
         document.getElementById('result-code').textContent = data.code;
@@ -154,7 +146,6 @@ class HSCodeVerifier {
             statusEl.className = 'invalid';
         }
         
-        // Obsługa rozszerzonych kodów (jeśli kod został rozszerzony)
         if (data.isSingleSubcode && data.originalCode) {
             this.extendedCodeSpan.textContent = `${data.originalCode} → ${data.code}`;
             this.extendedCodeInfo.classList.remove('hidden');
@@ -162,13 +153,11 @@ class HSCodeVerifier {
             this.extendedCodeInfo.classList.add('hidden');
         }
         
-        // Usuń stare ostrzeżenia sankcyjne jeśli istnieją
         const oldWarning = document.querySelector('.sanction-warning');
         if (oldWarning) {
             oldWarning.remove();
         }
         
-        // Dodaj ostrzeżenie sankcyjne jeśli dotyczy
         if (data.sanctioned) {
             console.log('Wyświetlam ostrzeżenie sankcyjne dla kodu:', data.code);
             
@@ -179,14 +168,11 @@ class HSCodeVerifier {
                 <strong>${data.sanctionMessage || 'UWAGA: Towar sankcyjny!'}</strong>
             `;
             
-            // Dodaj ostrzeżenie do karty wyników
             const resultCard = document.getElementById('result');
             resultCard.appendChild(warning);
             
-            // Dodaj też klasę do karty wyników dla dodatkowego stylu
             resultCard.classList.add('has-sanction');
         } else {
-            // Usuń klasę jeśli nie ma sankcji
             document.getElementById('result').classList.remove('has-sanction');
         }
         
