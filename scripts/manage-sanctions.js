@@ -105,7 +105,7 @@ Polecenia:
 
 Przykłady:
   node scripts/manage-sanctions.js list
-  node scripts/manage-sanctions.js update "TWÓJ_TOKEN" sanctions-list.txt
+  node scripts/manage-sanctions.js update "TWÓJ_TOKEN" sanction-list.txt
   node scripts/manage-sanctions.js update "TWÓJ_TOKEN" list1.txt list2.txt
 
 Pliki z kodami powinny zawierać po jednym kodzie 4-cyfrowym w każdej linii.
@@ -131,7 +131,7 @@ Komentarze zaczynają się od #.
       case 'update':
         if (args.length < 3) {
           console.log('❌ Błąd: Brak tokenu lub plików');
-          console.log('   Użyj: node scripts/manage-sanctions.js update <token> <pliki...>');
+          console.log('   Użyj: node scripts/manage-sanctions.js update <token> sanction-list.txt');
           process.exit(1);
         }
         

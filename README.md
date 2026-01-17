@@ -30,4 +30,4 @@ System sprawdza czy kod HS należy do grupy sankcyjnej. Jeśli kod zaczyna się 
 
 1. **Wyświetl aktualną listę:**
    ```bash
-   npm run sanctions-list
+   npm run sanction-list
