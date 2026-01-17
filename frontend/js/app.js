@@ -16,6 +16,7 @@ class HSCodeVerifier {
         this.extendedCodeInfo = document.getElementById('extended-code-info');
         this.extendedCodeSpan = document.getElementById('extended-code');
         this.sanctionWarningTop = document.getElementById('sanction-warning-top');
+        this.controlledWarningTop = document.getElementById('controlled-warning-top');
         
         this.bindEvents();
         this.checkAPI();
@@ -35,7 +36,11 @@ class HSCodeVerifier {
             this.hsCodeInput.value = '';
             this.result.classList.add('hidden');
             this.extendedCodeInfo.classList.add('hidden');
+            
+            // Ukryj oba ostrzeżenia
             this.sanctionWarningTop.classList.add('hidden');
+            this.controlledWarningTop.classList.add('hidden');
+            
             this.hsCodeInput.focus();
         });
         
@@ -79,6 +84,9 @@ class HSCodeVerifier {
                     this.dbCount.textContent = data.database.totalRecords || '0';
                     this.lastUpdate.textContent = data.database.lastSync || 'Nieznana';
                 }
+                
+                // Pobierz też dane o sankcjach i kontroli SANEPID
+                this.fetchAdditionalStats();
             } else {
                 this.apiStatus.textContent = 'Błąd ✗';
                 this.apiStatus.style.color = '#dc3545';
@@ -86,6 +94,28 @@ class HSCodeVerifier {
         } catch {
             this.apiStatus.textContent = 'Brak połączenia';
             this.apiStatus.style.color = '#dc3545';
+        }
+    }
+
+    async fetchAdditionalStats() {
+        try {
+            const [sanctionsRes, controlledRes] = await Promise.all([
+                fetch(`${this.apiBaseUrl}/sanctions`),
+                fetch(`${this.apiBaseUrl}/controlled`)
+            ]);
+            
+            const sanctionsData = await sanctionsRes.json();
+            const controlledData = await controlledRes.json();
+            
+            // Możesz dodać te informacje gdzieś w UI jeśli chcesz
+            if (sanctionsData.success) {
+                console.log(`Aktualne sankcje: ${sanctionsData.totalCodes} kodów`);
+            }
+            if (controlledData.success) {
+                console.log(`Aktualna kontrola SANEPID: ${controlledData.totalCodes} kodów`);
+            }
+        } catch (error) {
+            console.log('Nie udało się pobrać dodatkowych statystyk:', error);
         }
     }
 
@@ -152,6 +182,7 @@ class HSCodeVerifier {
             this.extendedCodeInfo.classList.add('hidden');
         }
         
+        // Obsługa ostrzeżeń sankcyjnych
         if (data.sanctioned) {
             console.log('Wyświetlam ostrzeżenie sankcyjne dla kodu:', data.code);
             this.sanctionWarningTop.classList.remove('hidden');
@@ -162,6 +193,19 @@ class HSCodeVerifier {
             this.sanctionWarningTop.classList.add('hidden');
         }
         
+        // Obsługa ostrzeżeń kontroli SANEPID
+        if (data.controlled) {
+            console.log('Wyświetlam ostrzeżenie kontroli SANEPID dla kodu:', data.code);
+            this.controlledWarningTop.classList.remove('hidden');
+            if (data.controlMessage) {
+                document.getElementById('controlled-message').textContent = data.controlMessage;
+            }
+        } else {
+            this.controlledWarningTop.classList.add('hidden');
+        }
+        
+        // Jeśli oba ostrzeżenia są widoczne, możesz je odpowiednio ułożyć
+        // (sankcyjne ma pierwszeństwo - jest wyżej)
         this.result.classList.remove('hidden');
     }
 

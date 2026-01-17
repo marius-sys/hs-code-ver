@@ -1,0 +1,21 @@
+# Lista kodów HS podlegających kontroli SANEPID na granicy
+# Kody 4-cyfrowe - każdej w nowej linii
+
+0201  # Mięso bydlęce
+0202  # Mięso cielęce
+0203  # Mięso wieprzowe
+0207  # Drób
+0301  # Ryby żywe
+0302  # Ryby mrożone
+0401  # Mleko i śmietana
+0402  # Mleko zagęszczone
+0403  # Maślanka, jogurty
+0405  # Masło
+0406  # Sery
+0701  # Ziemniaki
+0703  # Cebula, czosnek
+0805  # Cytrusy
+0901  # Kawa
+1001  # Pszenica
+1005  # Kukurydza
+1201  # Soja
