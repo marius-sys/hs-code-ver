@@ -3,196 +3,98 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HS Code Verifier - q4rail.com</title>
+    <title>HS Code Verifier v1.4.3</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        body {
-            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-    </style>
 </head>
 <body>
     <div class="container">
-        <!-- Nagłówek -->
         <header class="header">
             <div class="logo">
-                <i class="fas fa-search-location"></i>
-                <div class="logo-text">
-                    <h1>HS Code Verifier</h1>
-                    <p class="subtitle">System weryfikacji kodów celnych HS</p>
-                </div>
+                <i class="fas fa-search"></i>
+                <h1>HS Code Verifier v1.4.3</h1>
             </div>
-            <div class="format-info">
+            <p class="subtitle">System weryfikacji kodów celnych (Delta Updates)</p>
+            <p class="format-info">
                 <i class="fas fa-info-circle"></i>
-                <span>Akceptowane formaty: <strong>1234</strong>, <strong>1234 56</strong>, <strong>1234-56-78</strong>, <strong>1234567890</strong></span>
-            </div>
+                Format: 1234, 1234 56, 1234-56-78, 1234567890
+            </p>
         </header>
 
-        <!-- Główna zawartość -->
         <main class="main">
-            <!-- Panel wyszukiwania -->
-            <div class="card search-panel">
-                <h2><i class="fas fa-barcode"></i> Sprawdź kod HS</h2>
-                <p class="instruction">Wprowadź kod celny HS do weryfikacji. System automatycznie sprawdzi poprawność, znajdzie opis towaru oraz wykryje ewentualne ograniczenia.</p>
-                
+            <div class="card">
+                <h2><i class="fas fa-barcode"></i> Wprowadź kod HS</h2>
                 <div class="input-group">
-                    <input type="text" 
-                           id="hsCode" 
-                           placeholder="Przykład: 2204, 2204 10, 2204-10-00..." 
-                           maxlength="20"
-                           aria-label="Kod HS do weryfikacji">
+                    <input type="text" id="hsCode" placeholder="np. 2204, 2204 10, 2204-10-00" maxlength="20">
                     <button id="verifyBtn" class="btn-primary">
-                        <i class="fas fa-search"></i> Sprawdź kod
+                        <i class="fas fa-check"></i> Sprawdź
                     </button>
                 </div>
-                
                 <div class="examples">
-                    <span class="example-label">Szybkie testy:</span>
-                    <button class="btn-example" data-code="0101">
-                        <i class="fas fa-paw"></i> 0101
-                    </button>
-                    <button class="btn-example" data-code="2204 10">
-                        <i class="fas fa-wine-bottle"></i> 2204 10
-                    </button>
-                    <button class="btn-example" data-code="8703">
-                        <i class="fas fa-car"></i> 8703
-                    </button>
-                    <button class="btn-example" data-code="9999">
-                        <i class="fas fa-flask"></i> 9999 (test)
-                    </button>
+                    <small>Przykłady: </small>
+                    <button class="btn-example" data-code="0101">0101</button>
+                    <button class="btn-example" data-code="2204 10">2204 10</button>
+                    <button class="btn-example" data-code="2204-10-00">2204-10-00</button>
+                    <button class="btn-example" data-code="9999">9999 (test)</button>
                 </div>
             </div>
 
-            <!-- Ładowanie -->
             <div id="loading" class="loading hidden">
                 <div class="spinner"></div>
-                <p>Trwa weryfikacja kodu...</p>
-                <p class="loading-sub">Sprawdzamy bazę danych ISZTAR</p>
+                <p>Sprawdzanie...</p>
             </div>
 
-            <!-- Wyniki -->
-            <div id="result" class="card result-panel hidden">
+            <div id="result" class="card hidden">
                 <h2><i class="fas fa-clipboard-check"></i> Wynik weryfikacji</h2>
                 
-                <div class="result-grid">
-                    <div class="result-item">
-                        <div class="result-label">
-                            <i class="fas fa-hashtag"></i>
-                            <strong>Kod HS:</strong>
-                        </div>
-                        <div class="result-value" id="result-code"></div>
-                    </div>
-                    
-                    <div class="result-item">
-                        <div class="result-label">
-                            <i class="fas fa-box-open"></i>
-                            <strong>Opis towaru:</strong>
-                        </div>
-                        <div class="result-value" id="result-desc"></div>
-                    </div>
-                    
-                    <div class="result-item">
-                        <div class="result-label">
-                            <i class="fas fa-clipboard-list"></i>
-                            <strong>Status weryfikacji:</strong>
-                        </div>
-                        <div class="result-value">
-                            <span id="result-status"></span>
-                        </div>
-                    </div>
+                <div class="result-item">
+                    <strong>Kod HS:</strong> <span id="result-code"></span>
+                </div>
+                <div class="result-item">
+                    <strong>Opis towaru:</strong> 
+                    <div id="result-desc" class="description-container"></div>
+                </div>
+                <div class="result-item">
+                    <strong>Status weryfikacji:</strong> <span id="result-status"></span>
                 </div>
                 
-                <div id="extended-code-info" class="extended-info hidden">
-                    <i class="fas fa-expand-alt"></i>
-                    <div>
-                        <strong>Kod rozszerzony:</strong>
-                        <span id="extended-code"></span>
-                    </div>
+                <div id="extended-code-info" class="result-item hidden">
+                    <strong>Rozszerzony kod:</strong> <span id="extended-code"></span>
                 </div>
                 
-                <div class="result-actions">
-                    <button id="newBtn" class="btn-secondary">
-                        <i class="fas fa-redo"></i> Nowa weryfikacja
-                    </button>
-                    <button id="copyBtn" class="btn-secondary">
-                        <i class="fas fa-copy"></i> Kopiuj wynik
-                    </button>
-                </div>
+                <button id="newBtn" class="btn-secondary">
+                    <i class="fas fa-redo"></i> Nowe sprawdzenie
+                </button>
             </div>
 
-            <!-- Informacje o systemie -->
-            <div class="info-section">
-                <h2 class="section-title">
-                    <i class="fas fa-cogs"></i> Funkcje systemu
-                </h2>
-                
-                <div class="info-cards">
-                    <div class="info-card">
-                        <i class="fas fa-sync-alt"></i>
-                        <div class="info-content">
-                            <h3>Delta Updates</h3>
-                            <p>Tylko zmienione dane są synchronizowane z ISZTAR, redukując czas aktualizacji</p>
-                        </div>
-                    </div>
-                    
-                    <div class="info-card">
-                        <i class="fas fa-bolt"></i>
-                        <div class="info-content">
-                            <h3>Szybka weryfikacja</h3>
-                            <p>Cache w pamięci zapewnia natychmiastowe odpowiedzi nawet przy dużym obciążeniu</p>
-                        </div>
-                    </div>
-                    
-                    <div class="info-card">
-                        <i class="fas fa-shield-alt"></i>
-                        <div class="info-content">
-                            <h3>Sankcje & SANEPID</h3>
-                            <p>Automatyczne wykrywanie towarów objętych ograniczeniami i kontrolą sanitarną</p>
-                        </div>
-                    </div>
-                    
-                    <div class="info-card">
-                        <i class="fas fa-database"></i>
-                        <div class="info-content">
-                            <h3>Baza ISZTAR</h3>
-                            <p>Dane z oficjalnego systemu Ministerstwa Finansów, aktualizowane codziennie</p>
-                        </div>
-                    </div>
+            <div class="info-cards">
+                <div class="info-card">
+                    <i class="fas fa-database"></i>
+                    <h3>Delta Updates</h3>
+                    <p>Tylko zmiany są synchronizowane</p>
+                </div>
+                <div class="info-card">
+                    <i class="fas fa-bolt"></i>
+                    <h3>Szybka weryfikacja</h3>
+                    <p>Cache w pamięci</p>
+                </div>
+                <div class="info-card">
+                    <i class="fas fa-shield-alt"></i>
+                    <h3>Sankcje & SANEPID</h3>
+                    <p>Automatyczne wykrywanie</p>
+                </div>
+                <div class="info-card">
+                    <i class="fas fa-keyboard"></i>
+                    <h3>Formaty</h3>
+                    <p>1234, 1234 56, 1234-56-78</p>
                 </div>
             </div>
         </main>
 
-        <!-- Stopka -->
         <footer class="footer">
-            <div class="footer-content">
-                <div class="footer-section">
-                    <h3><i class="fas fa-satellite-dish"></i> Status systemu</h3>
-                    <p>API: <span id="api-status" class="status-indicator">Sprawdzanie...</span></p>
-                    <p>Baza danych: <span id="db-format">...</span> (<span id="db-count">0</span> rekordów)</p>
-                </div>
-                
-                <div class="footer-section">
-                    <h3><i class="fas fa-info-circle"></i> Informacje</h3>
-                    <p>HS Code Verifier v1.4.3</p>
-                    <p>System dla q4rail.com</p>
-                    <p class="version">Ostatnia synchronizacja: <span id="last-sync">—</span></p>
-                </div>
-                
-                <div class="footer-section">
-                    <h3><i class="fas fa-link"></i> Linki</h3>
-                    <p><a href="https://hs-code.q4rail.com/" target="_blank">Strona główna</a></p>
-                    <p><a href="https://ext-isztar4.mf.gov.pl/" target="_blank">ISZTAR MF</a></p>
-                    <p><a href="https://github.com/marius-sys/hs-code-ver" target="_blank">GitHub</a></p>
-                </div>
-            </div>
-            
-            <div class="footer-bottom">
-                <p>&copy; 2024 HS Code Verifier | System dla q4rail.com | Wersja 1.4.3</p>
-            </div>
+            <p>HS Code Verifier v1.4.3 &copy; 2024 | Delta Updates</p>
+            <p>API Status: <span id="api-status">Sprawdzanie...</span></p>
+            <p class="version">Format: <span id="db-format">...</span> | Rekordy: <span id="db-count">...</span></p>
         </footer>
     </div>
 
