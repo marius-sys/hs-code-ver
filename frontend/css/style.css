@@ -10,6 +10,7 @@
     --q4r-warning: #ffc107;
     --q4r-info: #17a2b8;
     --q4r-sanepid: #2196f3; /* Niebieski dla SANEPID */
+    --q4r-sanctioned: #dc3545; /* Czerwony dla sankcji */
 }
 
 * {
@@ -270,6 +271,21 @@ button {
     border: 1px solid rgba(21, 42, 94, 0.3);
 }
 
+/* Dodaj nowe style dla statusów */
+.sanctioned {
+    background: rgba(220, 53, 69, 0.15);
+    color: var(--q4r-sanctioned);
+    border: 1px solid rgba(220, 53, 69, 0.3);
+    font-weight: bold;
+}
+
+.controlled-status {
+    background: rgba(33, 150, 243, 0.15);
+    color: var(--q4r-sanepid);
+    border: 1px solid rgba(33, 150, 243, 0.3);
+    font-weight: bold;
+}
+
 .hidden {
     display: none !important;
 }
@@ -381,6 +397,24 @@ input::placeholder {
     0% { box-shadow: 0 5px 15px rgba(33, 150, 243, 0.2); }
     50% { box-shadow: 0 5px 20px rgba(33, 150, 243, 0.4); }
     100% { box-shadow: 0 5px 15px rgba(33, 150, 243, 0.2); }
+}
+
+/* Styl dla sformatowanego opisu towaru */
+#result-desc br {
+    content: '';
+    display: block;
+    margin: 5px 0;
+    line-height: 1.4;
+}
+
+#result-desc {
+    line-height: 1.6;
+    margin-left: 10px;
+}
+
+#result-desc strong {
+    color: var(--q4r-primary);
+    font-weight: 700;
 }
 
 .info-cards {

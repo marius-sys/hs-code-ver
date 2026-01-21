@@ -160,11 +160,28 @@ class HSCodeVerifier {
         console.log('Dane z API:', data);
         
         document.getElementById('result-code').textContent = data.code;
-        document.getElementById('result-desc').textContent = data.description;
+        
+        // Wyświetl sformatowany opis lub zwykły
+        const descElement = document.getElementById('result-desc');
+        if (data.formattedDescription) {
+            descElement.innerHTML = data.formattedDescription;
+        } else {
+            descElement.textContent = data.description;
+        }
         
         const statusEl = document.getElementById('result-status');
         
-        if (data.isGeneralCode) {
+        // Ustaw status weryfikacji
+        if (data.specialStatus) {
+            // Kod sankcyjny lub pod kontrolą SANEPID
+            if (data.specialStatus === 'SANKCJE') {
+                statusEl.textContent = 'SANKCJE';
+                statusEl.className = 'sanctioned';
+            } else if (data.specialStatus === 'SANEPID') {
+                statusEl.textContent = 'SANEPID';
+                statusEl.className = 'controlled-status';
+            }
+        } else if (data.isGeneralCode) {
             statusEl.textContent = 'KOD OGÓLNY';
             statusEl.className = 'general';
         } else if (data.isValid) {
@@ -175,7 +192,7 @@ class HSCodeVerifier {
             statusEl.className = 'invalid';
         }
         
-        if ((data.isSingleSubcode || data.isPrefixMatch) && data.originalCode) {
+        if ((data.isSingleSubcode || data.isExtendedFromPrefix) && data.originalCode) {
             this.extendedCodeSpan.textContent = `${data.originalCode} → ${data.code}`;
             this.extendedCodeInfo.classList.remove('hidden');
         } else {
@@ -204,8 +221,11 @@ class HSCodeVerifier {
             this.controlledWarningTop.classList.add('hidden');
         }
         
-        // Jeśli oba ostrzeżenia są widoczne, możesz je odpowiednio ułożyć
-        // (sankcyjne ma pierwszeństwo - jest wyżej)
+        // Jeśli oba ostrzeżenia są widoczne, ukryj SANEPID (sankcyjne ma pierwszeństwo)
+        if (data.sanctioned && data.controlled) {
+            this.controlledWarningTop.classList.add('hidden');
+        }
+        
         this.result.classList.remove('hidden');
     }
 
