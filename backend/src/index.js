@@ -85,23 +85,22 @@ async function checkIfSanctioned(code, env) {
   }
 }
 
-// DODANE: Funkcja sprawdzająca kontrolę SANEPID
-async function checkIfControlled(code, env) {
+async function checkIfSanepid(code, env) {
   try {
     if (!env.HS_DATABASE) return false;
     
-    const controlledData = await env.HS_DATABASE.get('HS_CONTROLLED_CODES', 'json');
-    if (!controlledData || !controlledData.codes) return false;
+    const sanepidData = await env.HS_DATABASE.get('HS_SANEPID_CODES', 'json');
+    if (!sanepidData || !sanepidData.codes) return false;
     
-    for (const controlledCode of controlledData.codes) {
-      if (code.startsWith(controlledCode)) {
+    for (const sanepidCode of sanepidData.codes) {
+      if (code.startsWith(sanepidCode)) {
         return true;
       }
     }
     
     return false;
   } catch (error) {
-    console.error('Błąd sprawdzania kodów pod kontrolą SANEPID:', error);
+    console.error('Błąd sprawdzania kodów SANEPID:', error);
     return false;
   }
 }
@@ -130,12 +129,27 @@ async function verifyHSCode(code, env) {
     
     const database = await getDatabase(env);
     
+    // Sprawdź czy kod podlega sankcjom lub SANEPID
+    const isSanctioned = await checkIfSanctioned(cleanedCode, env);
+    const isSanepid = await checkIfSanepid(cleanedCode, env);
+    
+    let specialStatus = null;
+    let specialMessage = null;
+    let isValidForStatus = true;
+    
+    if (isSanepid) {
+      specialStatus = 'sanepid';
+      specialMessage = 'UWAGA: Towar podlega kontroli SANEPID - wymagane dokumenty sanitarne! Wymagane dokumenty sanitarne: świadectwo weterynaryjne, certyfikat fitosanitarny.';
+      isValidForStatus = false; // Kod SANEPID nie może mieć statusu "POPRAWNY"
+    } else if (isSanctioned) {
+      specialStatus = 'sanction';
+      specialMessage = 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!';
+      isValidForStatus = false; // Kod sankcyjny nie może mieć statusu "POPRAWNY"
+    }
+    
     // 1. Sprawdź dokładne dopasowanie
     const exactMatch = database[cleanedCode];
     if (exactMatch) {
-      const isSanctioned = await checkIfSanctioned(cleanedCode, env);
-      const isControlled = await checkIfControlled(cleanedCode, env); // DODANE
-      
       return {
         success: true,
         code: cleanedCode,
@@ -144,10 +158,9 @@ async function verifyHSCode(code, env) {
         isValid: true,
         lastUpdated: await getLastSyncDate(env),
         cached: (Date.now() - cacheTimestamp) < CACHE_TTL,
-        sanctioned: isSanctioned,
-        sanctionMessage: isSanctioned ? 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!' : null,
-        controlled: isControlled, // DODANE
-        controlMessage: isControlled ? 'UWAGA: Towar podlega kontroli SANEPID - wymagane dokumenty sanitarne!' : null // DODANE
+        specialStatus: specialStatus,
+        specialMessage: specialMessage,
+        isValidForStatus: isValidForStatus
       };
     }
     
@@ -166,9 +179,6 @@ async function verifyHSCode(code, env) {
       const singleCode = detailedCodes[0];
       const paddedCode = singleCode.padEnd(10, '0');
       
-      const isSanctioned = await checkIfSanctioned(paddedCode, env);
-      const isControlled = await checkIfControlled(paddedCode, env); // DODANE
-      
       return {
         success: true,
         code: paddedCode,
@@ -177,18 +187,14 @@ async function verifyHSCode(code, env) {
         source: 'isztar_delta_database',
         isValid: true,
         isSingleSubcode: true,
-        sanctioned: isSanctioned,
-        sanctionMessage: isSanctioned ? 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!' : null,
-        controlled: isControlled, // DODANE
-        controlMessage: isControlled ? 'UWAGA: Towar podlega kontroli SANEPID - wymagane dokumenty sanitarne!' : null // DODANE
+        specialStatus: specialStatus,
+        specialMessage: specialMessage,
+        isValidForStatus: isValidForStatus
       };
     }
     
     // 5. Jeśli znaleziono wiele kodów szczegółowych
     if (detailedCodes.length > 1) {
-      const isSanctioned = await checkIfSanctioned(cleanedCode, env);
-      const isControlled = await checkIfControlled(cleanedCode, env); // DODANE
-      
       return {
         success: true,
         code: cleanedCode,
@@ -198,10 +204,9 @@ async function verifyHSCode(code, env) {
         source: 'isztar_delta_database',
         isValid: true,
         isGeneralCode: true,
-        sanctioned: isSanctioned,
-        sanctionMessage: isSanctioned ? 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!' : null,
-        controlled: isControlled, // DODANE
-        controlMessage: isControlled ? 'UWAGA: Towar podlega kontroli SANEPID - wymagane dokumenty sanitarne!' : null // DODANE
+        specialStatus: specialStatus,
+        specialMessage: specialMessage,
+        isValidForStatus: isValidForStatus
       };
     }
     
@@ -209,18 +214,18 @@ async function verifyHSCode(code, env) {
     if (generalCodes.length > 0) {
       const longestPrefix = generalCodes[0];
       
+      // Znajdź WSZYSTKIE kody zaczynające się od tego prefiksu
       const allCodesWithPrefix = Object.keys(database)
         .filter(k => k.startsWith(longestPrefix))
         .sort();
       
+      // Znajdź tylko te kody, które zaczynają się od cleanedCode
       const codesStartingWithCleaned = Object.keys(database)
         .filter(k => k.startsWith(cleanedCode))
         .sort();
       
+      // Jeśli cleanedCode jest prefiksem jakichś kodów, to to jest kod ogólny
       if (codesStartingWithCleaned.length > 0) {
-        const isSanctioned = await checkIfSanctioned(cleanedCode, env);
-        const isControlled = await checkIfControlled(cleanedCode, env); // DODANE
-        
         return {
           success: true,
           code: cleanedCode,
@@ -230,17 +235,16 @@ async function verifyHSCode(code, env) {
           source: 'isztar_delta_database',
           isValid: true,
           isGeneralCode: true,
-          sanctioned: isSanctioned,
-          sanctionMessage: isSanctioned ? 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!' : null,
-          controlled: isControlled, // DODANE
-          controlMessage: isControlled ? 'UWAGA: Towar podlega kontroli SANEPID - wymagane dokumenty sanitarne!' : null // DODANE
+          specialStatus: specialStatus,
+          specialMessage: specialMessage,
+          isValidForStatus: isValidForStatus
         };
       }
       
+      // cleanedCode NIE jest prefiksem żadnego kodu - to znaczy, że jest rozszerzeniem prefiksu
       const paddedCode = cleanedCode.padEnd(10, '0');
-      const isSanctioned = await checkIfSanctioned(paddedCode, env);
-      const isControlled = await checkIfControlled(paddedCode, env); // DODANE
       
+      // Jeśli prefiks ma tylko jeden kod, to cleanedCode jest jego rozszerzeniem
       if (allCodesWithPrefix.length === 1) {
         return {
           success: true,
@@ -251,13 +255,14 @@ async function verifyHSCode(code, env) {
           isValid: true,
           isExtendedFromPrefix: true,
           matchedPrefix: longestPrefix,
-          sanctioned: isSanctioned,
-          sanctionMessage: isSanctioned ? 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!' : null,
-          controlled: isControlled, // DODANE
-          controlMessage: isControlled ? 'UWAGA: Towar podlega kontroli SANEPID - wymagane dokumenty sanitarne!' : null // DODANE
+          specialStatus: specialStatus,
+          specialMessage: specialMessage,
+          isValidForStatus: isValidForStatus
         };
       }
       
+      // Prefiks ma wiele kodów, ale cleanedCode nie jest prefiksem żadnego z nich
+      // To znaczy, że cleanedCode jest "nieznanym" rozszerzeniem
       return {
         success: true,
         code: paddedCode,
@@ -267,10 +272,9 @@ async function verifyHSCode(code, env) {
         isValid: true,
         isExtendedFromPrefix: true,
         matchedPrefix: longestPrefix,
-        sanctioned: isSanctioned,
-        sanctionMessage: isSanctioned ? 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!' : null,
-        controlled: isControlled, // DODANE
-        controlMessage: isControlled ? 'UWAGA: Towar podlega kontroli SANEPID - wymagane dokumenty sanitarne!' : null // DODANE
+        specialStatus: specialStatus,
+        specialMessage: specialMessage,
+        isValidForStatus: isValidForStatus
       };
     }
     
@@ -278,9 +282,12 @@ async function verifyHSCode(code, env) {
     return {
       success: false,
       code: cleanedCode,
-      description: 'Kod nieznany w systeme ISZTAR',
+      description: 'Kod nieznany w systemie ISZTAR',
       source: 'isztar_delta_database',
-      isValid: false
+      isValid: false,
+      specialStatus: specialStatus,
+      specialMessage: specialMessage,
+      isValidForStatus: false
     };
     
   } catch (error) {
@@ -323,7 +330,7 @@ export default {
     const url = new URL(request.url);
     
     const corsHeaders = {
-      'Access-Control-Allow-Origin': env.ALLOWED_ORIGINS || '*',
+      'Access-Control-Allow-Origin': 'https://hs-code.q4rail.com',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization'
     };
@@ -356,7 +363,7 @@ export default {
         let metadata = null;
         let databaseSize = 0;
         let sanctionedCount = 0;
-        let controlledCount = 0; // DODANE
+        let sanepidCount = 0;
         
         if (hasDatabase) {
           try {
@@ -369,10 +376,9 @@ export default {
               sanctionedCount = sanctionedData.codes.length;
             }
             
-            // DODANE: Pobierz dane kontroli SANEPID
-            const controlledData = await env.HS_DATABASE.get('HS_CONTROLLED_CODES', 'json');
-            if (controlledData && controlledData.codes) {
-              controlledCount = controlledData.codes.length;
+            const sanepidData = await env.HS_DATABASE.get('HS_SANEPID_CODES', 'json');
+            if (sanepidData && sanepidData.codes) {
+              sanepidCount = sanepidData.codes.length;
             }
           } catch (error) {
             console.log('Błąd odczytu KV:', error.message);
@@ -393,8 +399,8 @@ export default {
           sanctions: {
             totalCodes: sanctionedCount
           },
-          controlled: { // DODANE
-            totalCodes: controlledCount
+          sanepid: {
+            totalCodes: sanepidCount
           },
           timestamp: new Date().toISOString()
         }, { headers: corsHeaders });
@@ -453,9 +459,9 @@ export default {
         let metadata = null;
         let databaseSize = 0;
         let sanctionedCount = 0;
-        let controlledCount = 0; // DODANE
+        let sanepidCount = 0;
         let sanctionsLastUpdated = null;
-        let controlledLastUpdated = null; // DODANE
+        let sanepidLastUpdated = null;
         
         if (hasDatabase) {
           try {
@@ -469,11 +475,10 @@ export default {
               sanctionsLastUpdated = sanctionedData.lastUpdated || null;
             }
             
-            // DODANE: Pobierz dane kontroli SANEPID
-            const controlledData = await env.HS_DATABASE.get('HS_CONTROLLED_CODES', 'json');
-            if (controlledData) {
-              controlledCount = controlledData.codes ? controlledData.codes.length : 0;
-              controlledLastUpdated = controlledData.lastUpdated || null;
+            const sanepidData = await env.HS_DATABASE.get('HS_SANEPID_CODES', 'json');
+            if (sanepidData) {
+              sanepidCount = sanepidData.codes ? sanepidData.codes.length : 0;
+              sanepidLastUpdated = sanepidData.lastUpdated || null;
             }
           } catch (error) {
             console.log('Błąd odczytu statystyk:', error.message);
@@ -495,9 +500,9 @@ export default {
             totalCodes: sanctionedCount,
             lastUpdated: sanctionsLastUpdated
           },
-          controlled: { // DODANE
-            totalCodes: controlledCount,
-            lastUpdated: controlledLastUpdated
+          sanepid: {
+            totalCodes: sanepidCount,
+            lastUpdated: sanepidLastUpdated
           },
           rateLimit: {
             dailyLimit: RATE_LIMIT.maxRequests,
@@ -517,24 +522,29 @@ export default {
       try {
         const hasDatabase = !!env.HS_DATABASE;
         let sanctionedData = null;
+        let sanepidData = null;
         
         if (hasDatabase) {
           try {
             sanctionedData = await env.HS_DATABASE.get('HS_SANCTIONED_CODES', 'json');
+            sanepidData = await env.HS_DATABASE.get('HS_SANEPID_CODES', 'json');
           } catch (error) {
-            console.log('Błąd odczytu kodów sankcyjnych:', error.message);
+            console.log('Błąd odczytu kodów:', error.message);
           }
         }
         
         return Response.json({
           success: true,
-          codes: sanctionedData ? sanctionedData.codes || [] : [],
-          lastUpdated: sanctionedData ? sanctionedData.lastUpdated : null,
-          totalCodes: sanctionedData && sanctionedData.codes ? sanctionedData.codes.length : 0
+          sanctions: sanctionedData ? sanctionedData.codes || [] : [],
+          sanepid: sanepidData ? sanepidData.codes || [] : [],
+          sanctionsLastUpdated: sanctionedData ? sanctionedData.lastUpdated : null,
+          sanepidLastUpdated: sanepidData ? sanepidData.lastUpdated : null,
+          totalSanctions: sanctionedData && sanctionedData.codes ? sanctionedData.codes.length : 0,
+          totalSanepid: sanepidData && sanepidData.codes ? sanepidData.codes.length : 0
         }, { headers: corsHeaders });
       } catch (error) {
         return Response.json(
-          { success: false, error: 'Błąd pobierania kodów sankcyjnych' },
+          { success: false, error: 'Błąd pobierania kodów' },
           { status: 500, headers: corsHeaders }
         );
       }
@@ -551,7 +561,7 @@ export default {
       
       try {
         const body = await request.json();
-        const { codes } = body;
+        const { codes, type = 'sanctions' } = body;
         
         if (!codes || !Array.isArray(codes)) {
           return Response.json(
@@ -566,6 +576,7 @@ export default {
           console.warn(`Niektóre kody są nieprawidłowe. Zaakceptowano ${validCodes.length} z ${codes.length}`);
         }
         
+        const key = type === 'sanepid' ? 'HS_SANEPID_CODES' : 'HS_SANCTIONED_CODES';
         const data = {
           codes: validCodes,
           lastUpdated: new Date().toISOString(),
@@ -573,90 +584,11 @@ export default {
           version: '1.0'
         };
         
-        await env.HS_DATABASE.put('HS_SANCTIONED_CODES', JSON.stringify(data));
+        await env.HS_DATABASE.put(key, JSON.stringify(data));
         
         return Response.json({
           success: true,
-          message: `Zaktualizowano ${validCodes.length} kodów sankcyjnych`,
-          data: data
-        }, { headers: corsHeaders });
-        
-      } catch (error) {
-        return Response.json(
-          { error: 'Nieprawidłowy format danych', details: error.message },
-          { status: 400, headers: corsHeaders }
-        );
-      }
-    }
-    
-    // DODANE: Endpointy kontroli SANEPID
-    if (url.pathname === '/controlled' && request.method === 'GET') {
-      try {
-        const hasDatabase = !!env.HS_DATABASE;
-        let controlledData = null;
-        
-        if (hasDatabase) {
-          try {
-            controlledData = await env.HS_DATABASE.get('HS_CONTROLLED_CODES', 'json');
-          } catch (error) {
-            console.log('Błąd odczytu kodów kontroli SANEPID:', error.message);
-          }
-        }
-        
-        return Response.json({
-          success: true,
-          codes: controlledData ? controlledData.codes || [] : [],
-          lastUpdated: controlledData ? controlledData.lastUpdated : null,
-          totalCodes: controlledData && controlledData.codes ? controlledData.codes.length : 0,
-          listType: 'sanepid_control'
-        }, { headers: corsHeaders });
-      } catch (error) {
-        return Response.json(
-          { success: false, error: 'Błąd pobierania kodów kontroli SANEPID' },
-          { status: 500, headers: corsHeaders }
-        );
-      }
-    }
-    
-    if (url.pathname === '/controlled/update' && request.method === 'POST') {
-      const authToken = request.headers.get('Authorization');
-      if (!env.SYNC_TOKEN || authToken !== `Bearer ${env.SYNC_TOKEN}`) {
-        return Response.json(
-          { error: 'Brak autoryzacji' },
-          { status: 401, headers: corsHeaders }
-        );
-      }
-      
-      try {
-        const body = await request.json();
-        const { codes } = body;
-        
-        if (!codes || !Array.isArray(codes)) {
-          return Response.json(
-            { error: 'Nieprawidłowy format danych. Oczekiwano tablicy "codes"' },
-            { status: 400, headers: corsHeaders }
-          );
-        }
-        
-        const validCodes = codes.filter(code => /^\d{4}$/.test(code));
-        
-        if (validCodes.length !== codes.length) {
-          console.warn(`Niektóre kody są nieprawidłowe. Zaakceptowano ${validCodes.length} z ${codes.length}`);
-        }
-        
-        const data = {
-          codes: validCodes,
-          lastUpdated: new Date().toISOString(),
-          totalCodes: validCodes.length,
-          version: '1.0',
-          listType: 'sanepid_control'
-        };
-        
-        await env.HS_DATABASE.put('HS_CONTROLLED_CODES', JSON.stringify(data));
-        
-        return Response.json({
-          success: true,
-          message: `Zaktualizowano ${validCodes.length} kodów pod kontrolą SANEPID`,
+          message: `Zaktualizowano ${validCodes.length} kodów ${type === 'sanepid' ? 'SANEPID' : 'sankcyjnych'}`,
           data: data
         }, { headers: corsHeaders });
         
@@ -678,10 +610,8 @@ export default {
         'GET /health - Status zdrowia systemu',
         'POST /verify - Weryfikacja kodu HS (akceptuje formaty: 1234, 1234 56, 1234-56-78)',
         'GET /stats - Statystyki bazy danych',
-        'GET /sanctions - Lista kodów sankcyjnych',
-        'POST /sanctions/update - Aktualizacja listy sankcji (wymaga tokenu)',
-        'GET /controlled - Lista kodów pod kontrolą SANEPID', // DODANE
-        'POST /controlled/update - Aktualizacja listy kontroli SANEPID (wymaga tokenu)' // DODANE
+        'GET /sanctions - Lista kodów sankcyjnych i SANEPID',
+        'POST /sanctions/update - Aktualizacja listy sankcji/SANEPID (wymaga tokenu)'
       ],
       timestamp: new Date().toISOString()
     }, { headers: corsHeaders });
