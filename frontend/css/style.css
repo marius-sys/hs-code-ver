@@ -243,6 +243,8 @@ button {
 .result-item strong {
     min-width: 140px;
     color: var(--q4r-primary);
+    /* Zapewnia, że po dwukropku jest spacja */
+    white-space: pre;
 }
 
 #result-status {
@@ -415,6 +417,9 @@ input::placeholder {
 #result-desc strong {
     color: var(--q4r-primary);
     font-weight: 700;
+    /* Resetujemy min-width dla strong wewnątrz opisu */
+    min-width: auto;
+    white-space: normal;
 }
 
 .info-cards {

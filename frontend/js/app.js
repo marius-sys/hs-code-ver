@@ -70,6 +70,39 @@ class HSCodeVerifier {
         input.value = value;
     }
 
+    formatDescription(description) {
+        if (!description) return '';
+        
+        const parts = description.split(' → ');
+        const lastIndex = parts.length - 1;
+        
+        // Sprawdź czy ostatnia część to "Pozostałe"
+        const isLastRemaining = parts[lastIndex].includes('Pozostałe');
+        
+        // Formatuj każdą część
+        const formattedParts = parts.map((part, index) => {
+            let formattedPart = part;
+            
+            // Pogrubienie odpowiednich części
+            if (isLastRemaining) {
+                // Jeśli ostatni to "Pozostałe", pogrubiamy ostatnie dwie części
+                if (index >= lastIndex - 1) {
+                    formattedPart = `<strong>${part}</strong>`;
+                }
+            } else {
+                // W przeciwnym razie tylko ostatnią część
+                if (index === lastIndex) {
+                    formattedPart = `<strong>${part}</strong>`;
+                }
+            }
+            
+            return formattedPart;
+        });
+        
+        // Połącz z <br> zamiast →
+        return formattedParts.join('<br>');
+    }
+
     async checkAPI() {
         try {
             const response = await fetch(`${this.apiBaseUrl}/health`);
@@ -159,26 +192,20 @@ class HSCodeVerifier {
     displayResult(data) {
         console.log('Dane z API:', data);
         
-        // Dodaj spację przed wartościami dla lepszego kopiowania
+        // Ustaw kod HS - dodajemy nierozłączną spację przed wartością
         const codeElement = document.getElementById('result-code');
-        codeElement.textContent = data.code;
-        
-        // Jeśli element ma ::before w CSS, możemy dodać spację do zawartości
-        if (!codeElement.textContent.startsWith(' ')) {
-            codeElement.textContent = ' ' + data.code;
-        }
+        // Używamy nierozłącznej spacji (U+00A0) aby była zawsze widoczna
+        codeElement.innerHTML = `&nbsp;${data.code}`;
         
         // Wyświetl sformatowany opis lub zwykły
         const descElement = document.getElementById('result-desc');
         if (data.formattedDescription) {
-            descElement.innerHTML = data.formattedDescription;
+            descElement.innerHTML = `&nbsp;${data.formattedDescription}`;
+        } else if (data.description) {
+            // Jeśli backend nie dostarczył sformatowanego opisu, sformatuj go na froncie
+            descElement.innerHTML = `&nbsp;${this.formatDescription(data.description)}`;
         } else {
-            descElement.textContent = data.description;
-        }
-        
-        // Dodaj spację przed opisem jeśli nie ma
-        if (descElement.textContent && !descElement.textContent.startsWith(' ')) {
-            descElement.textContent = ' ' + descElement.textContent;
+            descElement.textContent = '';
         }
         
         const statusEl = document.getElementById('result-status');
@@ -205,11 +232,11 @@ class HSCodeVerifier {
             statusEl.className = 'invalid';
         }
         
-        // Dodaj spację przed statusem
-        statusEl.textContent = ' ' + statusText;
+        // Dodaj nierozłączną spację przed statusem
+        statusEl.innerHTML = `&nbsp;${statusText}`;
         
         if ((data.isSingleSubcode || data.isExtendedFromPrefix) && data.originalCode) {
-            this.extendedCodeSpan.textContent = ` ${data.originalCode} → ${data.code}`;
+            this.extendedCodeSpan.innerHTML = `&nbsp;${data.originalCode} → ${data.code}`;
             this.extendedCodeInfo.classList.remove('hidden');
         } else {
             this.extendedCodeInfo.classList.add('hidden');
