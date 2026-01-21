@@ -166,42 +166,35 @@ async function verifyHSCode(code, env) {
     const isSanctioned = await checkIfSanctioned(cleanedCode, env);
     const isControlled = await checkIfControlled(cleanedCode, env);
     
-    if (isSanctioned || isControlled) {
-      const description = isSanctioned ? 'Kod sankcyjny - sprawdź ograniczenia' : 'Kod pod kontrolą SANEPID - wymagane dokumenty';
-      const formattedDescription = formatDescription(description);
-      
-      return {
-        success: true,
-        code: cleanedCode,
-        description: description,
-        formattedDescription: formattedDescription,
-        source: 'isztar_delta_database',
-        isValid: false, // Nie jest poprawny w sensie handlowym
-        lastUpdated: await getLastSyncDate(env),
-        cached: (Date.now() - cacheTimestamp) < CACHE_TTL,
-        sanctioned: isSanctioned,
-        sanctionMessage: isSanctioned ? 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!' : null,
-        controlled: isControlled,
-        controlMessage: isControlled ? 'UWAGA: Towar podlega kontroli SANEPID - wymagane dokumenty sanitarne!' : null,
-        specialStatus: isSanctioned ? 'SANKCJE' : 'SANEPID'
-      };
-    }
-    
     // 1. Sprawdź dokładne dopasowanie
     const exactMatch = database[cleanedCode];
     if (exactMatch) {
       const formattedDescription = formatDescription(exactMatch);
       
-      return {
+      const result = {
         success: true,
         code: cleanedCode,
         description: exactMatch,
         formattedDescription: formattedDescription,
         source: 'isztar_delta_database',
-        isValid: true,
+        isValid: !(isSanctioned || isControlled), // Niepoprawny tylko jeśli sankcyjny/SANEPID
         lastUpdated: await getLastSyncDate(env),
-        cached: (Date.now() - cacheTimestamp) < CACHE_TTL
+        cached: (Date.now() - cacheTimestamp) < CACHE_TTL,
+        sanctioned: isSanctioned,
+        controlled: isControlled
       };
+      
+      if (isSanctioned || isControlled) {
+        result.specialStatus = isSanctioned ? 'SANKCJE' : 'SANEPID';
+        if (isSanctioned) {
+          result.sanctionMessage = 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!';
+        }
+        if (isControlled) {
+          result.controlMessage = 'UWAGA: Towar podlega kontroli SANEPID - wymagane dokumenty sanitarne!';
+        }
+      }
+      
+      return result;
     }
     
     // 2. Znajdź kody, które zaczynają się od cleanedCode (kody szczegółowe)
@@ -220,16 +213,30 @@ async function verifyHSCode(code, env) {
       const paddedCode = singleCode.padEnd(10, '0');
       const formattedDescription = formatDescription(database[singleCode]);
       
-      return {
+      const result = {
         success: true,
         code: paddedCode,
         originalCode: cleanedCode,
         description: database[singleCode],
         formattedDescription: formattedDescription,
         source: 'isztar_delta_database',
-        isValid: true,
-        isSingleSubcode: true
+        isValid: !(isSanctioned || isControlled),
+        isSingleSubcode: true,
+        sanctioned: isSanctioned,
+        controlled: isControlled
       };
+      
+      if (isSanctioned || isControlled) {
+        result.specialStatus = isSanctioned ? 'SANKCJE' : 'SANEPID';
+        if (isSanctioned) {
+          result.sanctionMessage = 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!';
+        }
+        if (isControlled) {
+          result.controlMessage = 'UWAGA: Towar podlega kontroli SANEPID - wymagane dokumenty sanitarne!';
+        }
+      }
+      
+      return result;
     }
     
     // 5. Jeśli znaleziono wiele kodów szczegółowych
@@ -237,7 +244,7 @@ async function verifyHSCode(code, env) {
       const description = `Kod ogólny, zawiera ${detailedCodes.length} podkodów`;
       const formattedDescription = formatDescription(description);
       
-      return {
+      const result = {
         success: true,
         code: cleanedCode,
         description: description,
@@ -245,9 +252,23 @@ async function verifyHSCode(code, env) {
         details: detailedCodes.slice(0, 10),
         totalSubcodes: detailedCodes.length,
         source: 'isztar_delta_database',
-        isValid: true,
-        isGeneralCode: true
+        isValid: !(isSanctioned || isControlled),
+        isGeneralCode: true,
+        sanctioned: isSanctioned,
+        controlled: isControlled
       };
+      
+      if (isSanctioned || isControlled) {
+        result.specialStatus = isSanctioned ? 'SANKCJE' : 'SANEPID';
+        if (isSanctioned) {
+          result.sanctionMessage = 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!';
+        }
+        if (isControlled) {
+          result.controlMessage = 'UWAGA: Towar podlega kontroli SANEPID - wymagane dokumenty sanitarne!';
+        }
+      }
+      
+      return result;
     }
     
     // 6. Jeśli znaleziono kody ogólne (prefiksy)
@@ -266,7 +287,7 @@ async function verifyHSCode(code, env) {
         const description = `Kod ogólny, zawiera ${codesStartingWithCleaned.length} podkodów`;
         const formattedDescription = formatDescription(description);
         
-        return {
+        const result = {
           success: true,
           code: cleanedCode,
           description: description,
@@ -274,49 +295,77 @@ async function verifyHSCode(code, env) {
           details: codesStartingWithCleaned.slice(0, 10),
           totalSubcodes: codesStartingWithCleaned.length,
           source: 'isztar_delta_database',
-          isValid: true,
-          isGeneralCode: true
+          isValid: !(isSanctioned || isControlled),
+          isGeneralCode: true,
+          sanctioned: isSanctioned,
+          controlled: isControlled
         };
+        
+        if (isSanctioned || isControlled) {
+          result.specialStatus = isSanctioned ? 'SANKCJE' : 'SANEPID';
+          if (isSanctioned) {
+            result.sanctionMessage = 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!';
+          }
+          if (isControlled) {
+            result.controlMessage = 'UWAGA: Towar podlega kontroli SANEPID - wymagane dokumenty sanitarne!';
+          }
+        }
+        
+        return result;
       }
       
       const paddedCode = cleanedCode.padEnd(10, '0');
       const formattedDescription = formatDescription(database[longestPrefix]);
       
-      if (allCodesWithPrefix.length === 1) {
-        return {
-          success: true,
-          code: paddedCode,
-          originalCode: cleanedCode,
-          description: database[longestPrefix],
-          formattedDescription: formattedDescription,
-          source: 'isztar_delta_database',
-          isValid: true,
-          isExtendedFromPrefix: true,
-          matchedPrefix: longestPrefix
-        };
-      }
-      
-      return {
+      const result = {
         success: true,
         code: paddedCode,
         originalCode: cleanedCode,
         description: database[longestPrefix],
         formattedDescription: formattedDescription,
         source: 'isztar_delta_database',
-        isValid: true,
+        isValid: !(isSanctioned || isControlled),
         isExtendedFromPrefix: true,
-        matchedPrefix: longestPrefix
+        matchedPrefix: longestPrefix,
+        sanctioned: isSanctioned,
+        controlled: isControlled
       };
+      
+      if (isSanctioned || isControlled) {
+        result.specialStatus = isSanctioned ? 'SANKCJE' : 'SANEPID';
+        if (isSanctioned) {
+          result.sanctionMessage = 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!';
+        }
+        if (isControlled) {
+          result.controlMessage = 'UWAGA: Towar podlega kontroli SANEPID - wymagane dokumenty sanitarne!';
+        }
+      }
+      
+      return result;
     }
     
     // 7. Jeśli nie znaleziono żadnego pasującego kodu
-    return {
+    const result = {
       success: false,
       code: cleanedCode,
       description: 'Kod nieznany w systeme ISZTAR',
       source: 'isztar_delta_database',
-      isValid: false
+      isValid: false,
+      sanctioned: isSanctioned,
+      controlled: isControlled
     };
+    
+    if (isSanctioned || isControlled) {
+      result.specialStatus = isSanctioned ? 'SANKCJE' : 'SANEPID';
+      if (isSanctioned) {
+        result.sanctionMessage = 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!';
+      }
+      if (isControlled) {
+        result.controlMessage = 'UWAGA: Towar podlega kontroli SANEPID - wymagane dokumenty sanitarne!';
+      }
+    }
+    
+    return result;
     
   } catch (error) {
     console.error('Błąd weryfikacji:', error);

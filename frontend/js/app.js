@@ -159,7 +159,14 @@ class HSCodeVerifier {
     displayResult(data) {
         console.log('Dane z API:', data);
         
-        document.getElementById('result-code').textContent = data.code;
+        // Dodaj spację przed wartościami dla lepszego kopiowania
+        const codeElement = document.getElementById('result-code');
+        codeElement.textContent = data.code;
+        
+        // Jeśli element ma ::before w CSS, możemy dodać spację do zawartości
+        if (!codeElement.textContent.startsWith(' ')) {
+            codeElement.textContent = ' ' + data.code;
+        }
         
         // Wyświetl sformatowany opis lub zwykły
         const descElement = document.getElementById('result-desc');
@@ -169,31 +176,40 @@ class HSCodeVerifier {
             descElement.textContent = data.description;
         }
         
+        // Dodaj spację przed opisem jeśli nie ma
+        if (descElement.textContent && !descElement.textContent.startsWith(' ')) {
+            descElement.textContent = ' ' + descElement.textContent;
+        }
+        
         const statusEl = document.getElementById('result-status');
+        let statusText = '';
         
         // Ustaw status weryfikacji
         if (data.specialStatus) {
             // Kod sankcyjny lub pod kontrolą SANEPID
             if (data.specialStatus === 'SANKCJE') {
-                statusEl.textContent = 'SANKCJE';
+                statusText = 'SANKCJE';
                 statusEl.className = 'sanctioned';
             } else if (data.specialStatus === 'SANEPID') {
-                statusEl.textContent = 'SANEPID';
+                statusText = 'SANEPID';
                 statusEl.className = 'controlled-status';
             }
         } else if (data.isGeneralCode) {
-            statusEl.textContent = 'KOD OGÓLNY';
+            statusText = 'KOD OGÓLNY';
             statusEl.className = 'general';
         } else if (data.isValid) {
-            statusEl.textContent = 'POPRAWNY';
+            statusText = 'POPRAWNY';
             statusEl.className = 'valid';
         } else {
-            statusEl.textContent = 'NIEPOPRAWNY';
+            statusText = 'NIEPOPRAWNY';
             statusEl.className = 'invalid';
         }
         
+        // Dodaj spację przed statusem
+        statusEl.textContent = ' ' + statusText;
+        
         if ((data.isSingleSubcode || data.isExtendedFromPrefix) && data.originalCode) {
-            this.extendedCodeSpan.textContent = `${data.originalCode} → ${data.code}`;
+            this.extendedCodeSpan.textContent = ` ${data.originalCode} → ${data.code}`;
             this.extendedCodeInfo.classList.remove('hidden');
         } else {
             this.extendedCodeInfo.classList.add('hidden');
