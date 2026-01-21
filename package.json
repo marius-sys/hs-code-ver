@@ -2,15 +2,44 @@
   "name": "hs-code-ver",
   "version": "1.4.3",
   "type": "module",
+  "description": "System weryfikacji kodów celnych HS z bazą ISZTAR i systemami ostrzeżeń",
+  "keywords": [
+    "hs-codes",
+    "customs",
+    "verification",
+    "q4rail",
+    "sanepid",
+    "sanctions"
+  ],
+  "author": "Q4Rail Sp. z o.o.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/marius-sys/hs-code-ver"
+  },
+  "homepage": "https://marius-sys.github.io/hs-code-ver",
   "scripts": {
     "test-sync": "node scripts/test-sync.js",
     "test-isztar": "node scripts/test-isztar.js",
     "delta-sync": "node scripts/delta-sync.js",
     "deploy": "cd backend && npx wrangler deploy",
+    "dev": "cd backend && npx wrangler dev",
     "kv-test": "npx wrangler kv key get --namespace-id=d4e909bdc6114613ab76635fadb855b2 \"HS_METADATA\" --remote",
-    "lists-list": "node scripts/manage-sanctions.js list",
-    "list-update": "node scripts/manage-sanctions.js update",
-    "lists-help": "node scripts/manage-sanctions.js help"
+    "sanctions-list": "node scripts/manage-sanctions.js list",
+    "sanctions-update": "node scripts/manage-sanctions.js update",
+    "sanctions-help": "node scripts/manage-sanctions.js help",
+    "controlled-list": "node scripts/manage-controlled.js list",
+    "controlled-update": "node scripts/manage-controlled.js update",
+    "controlled-help": "node scripts/manage-controlled.js help",
+    "health": "curl -s https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev/health | jq .",
+    "stats": "curl -s https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev/stats | jq .",
+    "verify": "echo 'Użyj: npm run verify -- --code=0101'",
+    "test": "npm run test-sync && npm run test-isztar",
+    "setup-kv": "node scripts/setup-kv.js",
+    "full-deploy": "npm run delta-sync && npm run deploy"
+  },
+  "bin": {
+    "hs-verify": "./scripts/cli-verifier.js"
   },
   "dependencies": {
     "node-fetch": "^3.3.2"
@@ -19,6 +48,13 @@
     "wrangler": "^4.0.0"
   },
   "engines": {
-    "node": ">=20.0.0"
-  }
+    "node": ">=20.0.0",
+    "npm": ">=9.0.0"
+  },
+  "files": [
+    "scripts/",
+    "backend/",
+    "frontend/",
+    ".github/"
+  ]
 }

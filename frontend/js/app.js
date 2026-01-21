@@ -12,8 +12,11 @@ class HSCodeVerifier {
         this.apiStatus = document.getElementById('api-status');
         this.dbFormat = document.getElementById('db-format');
         this.dbCount = document.getElementById('db-count');
+        this.lastUpdate = document.getElementById('last-update');
         this.extendedCodeInfo = document.getElementById('extended-code-info');
         this.extendedCodeSpan = document.getElementById('extended-code');
+        this.sanctionWarningTop = document.getElementById('sanction-warning-top');
+        this.controlledWarningTop = document.getElementById('controlled-warning-top');
         
         this.bindEvents();
         this.checkAPI();
@@ -34,10 +37,10 @@ class HSCodeVerifier {
             this.result.classList.add('hidden');
             this.extendedCodeInfo.classList.add('hidden');
             
-            const warning = document.querySelector('.special-warning');
-            if (warning) {
-                warning.remove();
-            }
+            // Ukryj oba ostrzeżenia
+            this.sanctionWarningTop.classList.add('hidden');
+            this.controlledWarningTop.classList.add('hidden');
+            
             this.hsCodeInput.focus();
         });
         
@@ -79,7 +82,11 @@ class HSCodeVerifier {
                 if (data.database) {
                     this.dbFormat.textContent = data.database.hasBinding ? 'KV' : 'Brak';
                     this.dbCount.textContent = data.database.totalRecords || '0';
+                    this.lastUpdate.textContent = data.database.lastSync || 'Nieznana';
                 }
+                
+                // Pobierz też dane o sankcjach i kontroli SANEPID
+                this.fetchAdditionalStats();
             } else {
                 this.apiStatus.textContent = 'Błąd ✗';
                 this.apiStatus.style.color = '#dc3545';
@@ -87,6 +94,28 @@ class HSCodeVerifier {
         } catch {
             this.apiStatus.textContent = 'Brak połączenia';
             this.apiStatus.style.color = '#dc3545';
+        }
+    }
+
+    async fetchAdditionalStats() {
+        try {
+            const [sanctionsRes, controlledRes] = await Promise.all([
+                fetch(`${this.apiBaseUrl}/sanctions`),
+                fetch(`${this.apiBaseUrl}/controlled`)
+            ]);
+            
+            const sanctionsData = await sanctionsRes.json();
+            const controlledData = await controlledRes.json();
+            
+            // Możesz dodać te informacje gdzieś w UI jeśli chcesz
+            if (sanctionsData.success) {
+                console.log(`Aktualne sankcje: ${sanctionsData.totalCodes} kodów`);
+            }
+            if (controlledData.success) {
+                console.log(`Aktualna kontrola SANEPID: ${controlledData.totalCodes} kodów`);
+            }
+        } catch (error) {
+            console.log('Nie udało się pobrać dodatkowych statystyk:', error);
         }
     }
 
@@ -127,57 +156,15 @@ class HSCodeVerifier {
         }
     }
 
-    formatDescription(description) {
-        if (!description) return '';
-        
-        // Podziel opis na części używając ' → '
-        const parts = description.split(' → ');
-        
-        // Jeśli ostatnia część to "Pozostałe", pogrubiamy dwie ostatnie części
-        if (parts.length > 1 && parts[parts.length - 1].includes('Pozostałe')) {
-            const formattedParts = parts.slice(0, parts.length - 2).map(part => 
-                `<div class="desc-line">${part}</div>`
-            );
-            
-            formattedParts.push(
-                `<div class="desc-line"><strong>${parts[parts.length - 2]}</strong></div>`,
-                `<div class="desc-line"><strong>${parts[parts.length - 1]}</strong></div>`
-            );
-            
-            return formattedParts.join('');
-        } else {
-            // W przeciwnym razie pogrubiamy tylko ostatnią część
-            const formattedParts = parts.slice(0, parts.length - 1).map(part => 
-                `<div class="desc-line">${part}</div>`
-            );
-            
-            if (parts.length > 0) {
-                formattedParts.push(
-                    `<div class="desc-line"><strong>${parts[parts.length - 1]}</strong></div>`
-                );
-            }
-            
-            return formattedParts.join('');
-        }
-    }
-
     displayResult(data) {
         console.log('Dane z API:', data);
         
-        // Ustawiamy tylko wartości bez etykiet
         document.getElementById('result-code').textContent = data.code;
-        document.getElementById('result-desc').innerHTML = this.formatDescription(data.description);
+        document.getElementById('result-desc').textContent = data.description;
         
         const statusEl = document.getElementById('result-status');
         
-        // NOWA LOGIKA: Jeśli kod jest sankcyjny lub SANEPID, pokazujemy odpowiedni status
-        if (data.specialStatus === 'sanepid') {
-            statusEl.textContent = 'SANEPID';
-            statusEl.className = 'sanepid';
-        } else if (data.specialStatus === 'sanction') {
-            statusEl.textContent = 'SANKCJE';
-            statusEl.className = 'sanction';
-        } else if (data.isGeneralCode) {
+        if (data.isGeneralCode) {
             statusEl.textContent = 'KOD OGÓLNY';
             statusEl.className = 'general';
         } else if (data.isValid) {
@@ -188,56 +175,37 @@ class HSCodeVerifier {
             statusEl.className = 'invalid';
         }
         
-        // Obsługa rozszerzonych kodów
-        if ((data.isSingleSubcode || data.isExtendedFromPrefix) && data.originalCode) {
+        if ((data.isSingleSubcode || data.isPrefixMatch) && data.originalCode) {
             this.extendedCodeSpan.textContent = `${data.originalCode} → ${data.code}`;
             this.extendedCodeInfo.classList.remove('hidden');
         } else {
             this.extendedCodeInfo.classList.add('hidden');
         }
         
-        // Usuń stare ostrzeżenia jeśli istnieją
-        const oldWarning = document.querySelector('.special-warning');
-        if (oldWarning) {
-            oldWarning.remove();
-        }
-        
-        // Dodaj ostrzeżenie jeśli kod jest specjalny (SANEPID lub sankcje)
-        if (data.specialMessage) {
-            console.log('Wyświetlam ostrzeżenie specjalne dla kodu:', data.code);
-            
-            const warning = document.createElement('div');
-            warning.className = `special-warning ${data.specialStatus}`;
-            
-            if (data.specialStatus === 'sanepid') {
-                warning.innerHTML = `
-                    <i class="fas fa-virus"></i>
-                    <div class="warning-content">
-                        <strong>SANEPID</strong>
-                        <p>${data.specialMessage}</p>
-                    </div>
-                `;
-            } else if (data.specialStatus === 'sanction') {
-                warning.innerHTML = `
-                    <i class="fas fa-ban"></i>
-                    <div class="warning-content">
-                        <strong>SANKCJE</strong>
-                        <p>${data.specialMessage}</p>
-                    </div>
-                `;
+        // Obsługa ostrzeżeń sankcyjnych
+        if (data.sanctioned) {
+            console.log('Wyświetlam ostrzeżenie sankcyjne dla kodu:', data.code);
+            this.sanctionWarningTop.classList.remove('hidden');
+            if (data.sanctionMessage) {
+                document.getElementById('sanction-message').textContent = data.sanctionMessage;
             }
-            
-            // Dodaj ostrzeżenie na początek karty wyników
-            const resultCard = document.getElementById('result');
-            resultCard.insertBefore(warning, resultCard.firstChild.nextSibling);
-            
-            // Dodaj też klasę do karty wyników dla dodatkowego stylu
-            resultCard.classList.add('has-special');
         } else {
-            // Usuń klasę jeśli nie ma ostrzeżenia
-            document.getElementById('result').classList.remove('has-special');
+            this.sanctionWarningTop.classList.add('hidden');
         }
         
+        // Obsługa ostrzeżeń kontroli SANEPID
+        if (data.controlled) {
+            console.log('Wyświetlam ostrzeżenie kontroli SANEPID dla kodu:', data.code);
+            this.controlledWarningTop.classList.remove('hidden');
+            if (data.controlMessage) {
+                document.getElementById('controlled-message').textContent = data.controlMessage;
+            }
+        } else {
+            this.controlledWarningTop.classList.add('hidden');
+        }
+        
+        // Jeśli oba ostrzeżenia są widoczne, możesz je odpowiednio ułożyć
+        // (sankcyjne ma pierwszeństwo - jest wyżej)
         this.result.classList.remove('hidden');
     }
 

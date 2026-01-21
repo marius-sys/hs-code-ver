@@ -3,21 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HS Code Verifier v1.4.3</title>
+    <title>Q4Rail - Weryfikator Kodów Celnych HS</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; }
+    </style>
 </head>
 <body>
     <div class="container">
         <header class="header">
             <div class="logo">
-                <i class="fas fa-search"></i>
-                <h1>HS Code Verifier v1.4.3</h1>
+                <img src="logo.svg" alt="Q4Rail Logo" class="logo-image">
+                <h1>HS CODE VERIFIER</h1>
             </div>
-            <p class="subtitle">System weryfikacji kodów celnych (Delta Updates)</p>
+            <p class="subtitle">Profesjonalna weryfikacja kodów celnych dla logistyki międzynarodowej</p>
             <p class="format-info">
                 <i class="fas fa-info-circle"></i>
-                Format: 1234, 1234 56, 1234-56-78, 1234567890
+                Akceptowane formaty: 1234, 1234 56, 1234-56-78, 1234567890
             </p>
         </header>
 
@@ -27,74 +33,103 @@
                 <div class="input-group">
                     <input type="text" id="hsCode" placeholder="np. 2204, 2204 10, 2204-10-00" maxlength="20">
                     <button id="verifyBtn" class="btn-primary">
-                        <i class="fas fa-check"></i> Sprawdź
+                        <i class="fas fa-check-circle"></i> Sprawdź kod
                     </button>
                 </div>
                 <div class="examples">
-                    <small>Przykłady: </small>
-                    <button class="btn-example" data-code="0101">0101</button>
-                    <button class="btn-example" data-code="2204 10">2204 10</button>
-                    <button class="btn-example" data-code="2204-10-00">2204-10-00</button>
-                    <button class="btn-example" data-code="9999">9999 (test)</button>
+                    <small>Szybkie przykłady:</small>
+                    <button class="btn-example" data-code="0101">0101 (Konie)</button>
+                    <button class="btn-example" data-code="2204 10">2204 10 (Wino)</button>
+                    <button class="btn-example" data-code="8703">8703 (Samochody)</button>
+                    <button class="btn-example" data-code="9999">9999 (Test)</button>
                 </div>
             </div>
 
             <div id="loading" class="loading hidden">
                 <div class="spinner"></div>
-                <p>Sprawdzanie...</p>
+                <p>Weryfikacja kodu w systemie celno-transportowym...</p>
             </div>
 
             <div id="result" class="card hidden">
                 <h2><i class="fas fa-clipboard-check"></i> Wynik weryfikacji</h2>
                 
+                <!-- Ostrzeżenie sankcyjne na górze -->
+                <div id="sanction-warning-top" class="sanction-warning-top hidden">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <div>
+                        <strong id="sanction-message">UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!</strong>
+                        <p style="margin-top: 8px; font-size: 0.9rem; font-weight: normal;">
+                            Ten kod HS podlega specjalnym regulacjom i ograniczeniom w handlu międzynarodowym.
+                        </p>
+                    </div>
+                </div>
+                
+                <!-- Ostrzeżenie kontroli SANEPID na górze -->
+                <div id="controlled-warning-top" class="controlled-warning-top hidden">
+                    <i class="fas fa-clipboard-check"></i>
+                    <div>
+                        <strong id="controlled-message">UWAGA: Towar podlega kontroli SANEPID!</strong>
+                        <p style="margin-top: 8px; font-size: 0.9rem; font-weight: normal;">
+                            Wymagane dokumenty sanitarne: świadectwo weterynaryjne, certyfikat fitosanitarny.
+                        </p>
+                    </div>
+                </div>
+                
                 <div class="result-item">
-                    <strong>Kod HS:</strong> <span id="result-code"></span>
+                    <strong>Kod HS:</strong> 
+                    <span id="result-code" style="font-family: 'Courier New', monospace; font-weight: bold; font-size: 1.2rem; margin-left: 10px;"></span>
                 </div>
                 <div class="result-item">
                     <strong>Opis towaru:</strong> 
-                    <div id="result-desc" class="description-container"></div>
+                    <span id="result-desc" style="margin-left: 10px; line-height: 1.5;"></span>
                 </div>
                 <div class="result-item">
-                    <strong>Status weryfikacji:</strong> <span id="result-status"></span>
+                    <strong>Status weryfikacji:</strong> 
+                    <span id="result-status" style="margin-left: 10px;"></span>
                 </div>
                 
                 <div id="extended-code-info" class="result-item hidden">
-                    <strong>Rozszerzony kod:</strong> <span id="extended-code"></span>
+                    <strong>Pełny kod 10-cyfrowy:</strong> 
+                    <span id="extended-code" style="margin-left: 10px;"></span>
                 </div>
                 
                 <button id="newBtn" class="btn-secondary">
-                    <i class="fas fa-redo"></i> Nowe sprawdzenie
+                    <i class="fas fa-redo-alt"></i> Sprawdź kolejny kod
                 </button>
             </div>
 
             <div class="info-cards">
                 <div class="info-card">
                     <i class="fas fa-database"></i>
-                    <h3>Delta Updates</h3>
-                    <p>Tylko zmiany są synchronizowane</p>
+                    <h3>Aktualna baza ISZTAR</h3>
+                    <p>Synchronizacja delta z systemem Ministerstwa Finansów</p>
                 </div>
                 <div class="info-card">
                     <i class="fas fa-bolt"></i>
                     <h3>Szybka weryfikacja</h3>
-                    <p>Cache w pamięci</p>
+                    <p>Cache w pamięci dla natychmiastowych wyników</p>
                 </div>
                 <div class="info-card">
                     <i class="fas fa-shield-alt"></i>
-                    <h3>Sankcje & SANEPID</h3>
-                    <p>Automatyczne wykrywanie</p>
+                    <h3>System sankcyjny</h3>
+                    <p>Automatyczne wykrywanie kodów z ograniczeniami</p>
                 </div>
                 <div class="info-card">
-                    <i class="fas fa-keyboard"></i>
-                    <h3>Formaty</h3>
-                    <p>1234, 1234 56, 1234-56-78</p>
+                    <i class="fas fa-shipping-fast"></i>
+                    <h3>Dla transportu</h3>
+                    <p>Optymalizacja procesów celnych w logistyce</p>
                 </div>
             </div>
         </main>
 
         <footer class="footer">
-            <p>HS Code Verifier v1.4.3 &copy; 2024 | Delta Updates</p>
-            <p>API Status: <span id="api-status">Sprawdzanie...</span></p>
-            <p class="version">Format: <span id="db-format">...</span> | Rekordy: <span id="db-count">...</span></p>
+            <p><strong>Q4Rail Sp. z o.o.</strong> &copy; 2026 | Weryfikator Kodów HS v1.4.3</p>
+            <p>Status systemu: <span id="api-status">Sprawdzanie połączenia...</span></p>
+            <p class="version">
+                Baza: <span id="db-format">ISZTAR Delta</span> | 
+                Rekordów: <span id="db-count">...</span> |
+                Ostatnia aktualizacja: <span id="last-update">...</span>
+            </p>
         </footer>
     </div>
 

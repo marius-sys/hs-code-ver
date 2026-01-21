@@ -11,45 +11,36 @@ class SanctionsManager {
     this.workerUrl = "https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev";
   }
 
-  async getCurrentLists() {
-    console.log('📋 Pobieranie aktualnych list...\n');
+  async getCurrentSanctions() {
+    console.log('📋 Pobieranie aktualnej listy sankcji...\n');
     
     try {
       const response = await fetch(`${this.workerUrl}/sanctions`);
       const data = await response.json();
       
       if (data.success) {
-        console.log(`✅ Aktualne kody sankcyjne (${data.totalSanctions}):`);
-        data.sanctions.forEach((code, index) => {
+        console.log(`✅ Aktualne kody sankcyjne (${data.codes.length}):`);
+        data.codes.forEach((code, index) => {
           console.log(`   ${index + 1}. ${code}`);
         });
         
-        console.log(`\n✅ Aktualne kody SANEPID (${data.totalSanepid}):`);
-        data.sanepid.forEach((code, index) => {
-          console.log(`   ${index + 1}. ${code}`);
-        });
-        
-        if (data.sanctionsLastUpdated) {
-          console.log(`\n📅 Sankcje ostatnio zaktualizowane: ${data.sanctionsLastUpdated}`);
-        }
-        if (data.sanepidLastUpdated) {
-          console.log(`📅 SANEPID ostatnio zaktualizowany: ${data.sanepidLastUpdated}`);
+        if (data.lastUpdated) {
+          console.log(`\n📅 Ostatnia aktualizacja: ${data.lastUpdated}`);
         }
         
-        return { sanctions: data.sanctions, sanepid: data.sanepid };
+        return data.codes;
       } else {
         console.log('❌ Błąd:', data.error);
-        return { sanctions: [], sanepid: [] };
+        return [];
       }
     } catch (error) {
       console.log('❌ Błąd połączenia:', error.message);
-      return { sanctions: [], sanepid: [] };
+      return [];
     }
   }
 
-  async updateList(codes, token, type = 'sanctions') {
-    const listName = type === 'sanepid' ? 'SANEPID' : 'sankcyjnych';
-    console.log(`🔄 Aktualizowanie listy ${listName} (${codes.length} kodów)...\n`);
+  async updateSanctions(codes, token) {
+    console.log(`🔄 Aktualizowanie listy sankcji (${codes.length} kodów)...\n`);
     
     try {
       const response = await fetch(`${this.workerUrl}/sanctions/update`, {
@@ -60,7 +51,6 @@ class SanctionsManager {
         },
         body: JSON.stringify({
           codes: codes,
-          type: type,
           metadata: {
             updatedBy: 'sanctions-manager',
             timestamp: new Date().toISOString()
@@ -71,7 +61,7 @@ class SanctionsManager {
       const data = await response.json();
       
       if (data.success) {
-        console.log(`✅ Lista ${listName} zaktualizowana pomyślnie!`);
+        console.log('✅ Lista sankcji zaktualizowana pomyślnie!');
         console.log(`   • Ilość kodów: ${data.data.totalCodes}`);
         console.log(`   • Data: ${data.data.lastUpdated}`);
         console.log(`   • Wersja: ${data.data.version}`);
@@ -103,24 +93,20 @@ class SanctionsManager {
 
   printHelp() {
     console.log(`
-🎯 Menedżer kodów specjalnych HS Code Verifier v1.4.3
+🎯 Menedżer kodów sankcyjnych HS Code Verifier
 
 Użycie:
   node scripts/manage-sanctions.js [polecenie] [opcje]
 
 Polecenia:
-  list                    - Wyświetl aktualne listy kodów sankcyjnych i SANEPID
-  update <typ> <token> <pliki> - Zaktualizuj listę
+  list                    - Wyświetl aktualną listę kodów sankcyjnych
+  update <token> <pliki>  - Zaktualizuj listę sankcji
   help                    - Wyświetl tę pomoc
-
-Typy:
-  sanctions               - Kody sankcyjne
-  sanepid                 - Kody podlegające kontroli SANEPID
 
 Przykłady:
   node scripts/manage-sanctions.js list
-  node scripts/manage-sanctions.js update sanctions "TWÓJ_TOKEN" sanctions-list.txt
-  node scripts/manage-sanctions.js update sanepid "TWÓJ_TOKEN" sanepid-list.txt
+  node scripts/manage-sanctions.js update "TWÓJ_TOKEN" sanction-list.txt
+  node scripts/manage-sanctions.js update "TWÓJ_TOKEN" list1.txt list2.txt
 
 Pliki z kodami powinny zawierać po jednym kodzie 4-cyfrowym w każdej linii.
 Komentarze zaczynają się od #.
@@ -139,25 +125,19 @@ Komentarze zaczynają się od #.
     
     switch (command) {
       case 'list':
-        await this.getCurrentLists();
+        await this.getCurrentSanctions();
         break;
         
       case 'update':
-        if (args.length < 4) {
-          console.log('❌ Błąd: Brak typu, tokenu lub plików');
-          console.log('   Użyj: node scripts/manage-sanctions.js update <typ> <token> <pliki...>');
+        if (args.length < 3) {
+          console.log('❌ Błąd: Brak tokenu lub plików');
+          console.log('   Użyj: node scripts/manage-sanctions.js update <token> sanction-list.txt');
           process.exit(1);
         }
         
-        const type = args[1];
-        const token = args[2];
-        const files = args.slice(3);
+        const token = args[1];
+        const files = args.slice(2);
         let allCodes = [];
-        
-        if (type !== 'sanctions' && type !== 'sanepid') {
-          console.log('❌ Błąd: Nieprawidłowy typ. Użyj: sanctions lub sanepid');
-          process.exit(1);
-        }
         
         for (const file of files) {
           const codes = this.loadFromFile(file);
@@ -172,7 +152,6 @@ Komentarze zaczynają się od #.
         }
         
         console.log(`\n📊 Podsumowanie:`);
-        console.log(`   • Typ: ${type}`);
         console.log(`   • Pliki: ${files.join(', ')}`);
         console.log(`   • Unikalnych kodów: ${allCodes.length}`);
         console.log(`   • Przykłady: ${allCodes.slice(0, 5).join(', ')}${allCodes.length > 5 ? '...' : ''}`);
@@ -180,7 +159,7 @@ Komentarze zaczynają się od #.
         const confirm = await this.prompt('Czy chcesz kontynuować? (tak/nie): ');
         
         if (confirm.toLowerCase() === 'tak') {
-          await this.updateList(allCodes, token, type);
+          await this.updateSanctions(allCodes, token);
         } else {
           console.log('❌ Anulowano aktualizację');
         }

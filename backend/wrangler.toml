@@ -10,11 +10,10 @@ workers_dev = true
 ENVIRONMENT = "production"
 VERSION = "1.4.3"
 MAX_REQUESTS_PER_DAY = 20000
-ALLOWED_ORIGINS = "https://hs-code.q4rail.com,https://marius-sys.github.io"
+ALLOWED_ORIGINS = "https://marius-sys.github.io"
 SYNC_TOKEN = ""  # WYPEŁNIĆ W CLOUDFLARE
 CRON_SECRET = "" # WYPEŁNIĆ W CLOUDFLARE
 SANCTIONED_CODES = ""  # Kody 4-cyfrowe oddzielone przecinkami
-SANEPID_CODES = ""     # Kody 4-cyfrowe SANEPID oddzielone przecinkami
 
 [[kv_namespaces]]
 binding = "HS_DATABASE"
