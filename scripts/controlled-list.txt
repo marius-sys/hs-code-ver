@@ -1,21 +1,77 @@
-# Lista kodów HS podlegających kontroli SANEPID na granicy
 # Kody 4-cyfrowe - każdej w nowej linii
 
-0201  # Mięso bydlęce
-0202  # Mięso cielęce
-0203  # Mięso wieprzowe
-0207  # Drób
-0301  # Ryby żywe
-0302  # Ryby mrożone
-0401  # Mleko i śmietana
-0402  # Mleko zagęszczone
-0403  # Maślanka, jogurty
-0405  # Masło
-0406  # Sery
-0701  # Ziemniaki
-0703  # Cebula, czosnek
-0805  # Cytrusy
-0901  # Kawa
-1001  # Pszenica
-1005  # Kukurydza
-1201  # Soja
+0702
+0704
+7070
+0708
+0709
+0710
+0712
+0713
+0801
+0802
+8030
+0804
+0805
+0806
+0807
+0808
+0810
+0811
+0812
+0813
+0814
+0901
+0902
+0903
+0904
+0908
+0910
+1001
+1006
+1101
+1102
+1103
+1106
+1202
+1205
+1206
+1207
+1302
+1507
+1511
+1512
+1514
+1801
+1805
+1806
+1902
+1904
+1905
+2001
+2003
+2006
+2007
+2008
+2009
+2101
+2103
+2104
+2105
+2106
+2201
+2204
+2205
+2836
+3504
+3917
+3917
+3924
+6911
+6912
+6914
+7323
+8210
+8215
+8509
+9602
