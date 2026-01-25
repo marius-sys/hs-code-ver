@@ -207,7 +207,32 @@ async function verifyHSCode(code, env) {
       .filter(k => cleanedCode.startsWith(k))
       .sort((a, b) => b.length - a.length);
     
-    // 4. Jeśli znaleziono dokładnie jeden kod szczegółowy
+    // 4. Jeśli kod ma 10 cyfr i nie ma dokładnego dopasowania - NIE ZNAJDUJEMY!
+    if (cleanedCode.length === 10) {
+      const result = {
+        success: false,
+        code: cleanedCode,
+        description: 'Kod nieznany w systeme ISZTAR',
+        source: 'isztar_delta_database',
+        isValid: false,
+        sanctioned: isSanctioned,
+        controlled: isControlled
+      };
+      
+      if (isSanctioned || isControlled) {
+        result.specialStatus = isSanctioned ? 'SANKCJE' : 'SANEPID';
+        if (isSanctioned) {
+          result.sanctionMessage = 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!';
+        }
+        if (isControlled) {
+          result.controlMessage = 'UWAGA: Towar podlega kontroli SANEPID - wymagane dokumenty sanitarne!';
+        }
+      }
+      
+      return result;
+    }
+    
+    // 5. Jeśli znaleziono dokładnie jeden kod szczegółowy
     if (detailedCodes.length === 1) {
       const singleCode = detailedCodes[0];
       const paddedCode = singleCode.padEnd(10, '0');
@@ -239,7 +264,7 @@ async function verifyHSCode(code, env) {
       return result;
     }
     
-    // 5. Jeśli znaleziono wiele kodów szczegółowych
+    // 6. Jeśli znaleziono wiele kodów szczegółowych
     if (detailedCodes.length > 1) {
       const description = `Kod ogólny, zawiera ${detailedCodes.length} podkodów`;
       const formattedDescription = formatDescription(description);
@@ -271,7 +296,7 @@ async function verifyHSCode(code, env) {
       return result;
     }
     
-    // 6. Jeśli znaleziono kody ogólne (prefiksy)
+    // 7. Jeśli znaleziono kody ogólne (prefiksy)
     if (generalCodes.length > 0) {
       const longestPrefix = generalCodes[0];
       
@@ -344,7 +369,7 @@ async function verifyHSCode(code, env) {
       return result;
     }
     
-    // 7. Jeśli nie znaleziono żadnego pasującego kodu
+    // 8. Jeśli nie znaleziono żadnego pasującego kodu
     const result = {
       success: false,
       code: cleanedCode,
