@@ -138,9 +138,52 @@ async function checkIfControlled(code, env) {
   }
 }
 
+function normalizeHSCode(code) {
+  // Usuń wszystkie znaki niebędące cyframi
+  let cleaned = code.replace(/\D/g, '');
+  
+  // Jeśli kod ma 10 cyfr i kończy się zerami, usuń końcowe zera
+  // ale zostaw co najmniej 4 cyfry
+  if (cleaned.length === 10 && cleaned.endsWith('0')) {
+    // Usuń końcowe zera
+    let normalized = cleaned.replace(/0+$/, '');
+    
+    // Jeśli po usunięciu zer zostało mniej niż 4 cyfry, wróć do oryginału
+    if (normalized.length < 4) {
+      normalized = cleaned.substring(0, 4);
+    }
+    
+    // Ale nie skracaj poniżej długości oryginalnego kodu (jeśli ktoś wpisał np. 6 cyfr)
+    // Zachowaj minimalną długość 4 cyfr
+    if (normalized.length < 4) {
+      normalized = cleaned.substring(0, 4);
+    }
+    
+    return normalized;
+  }
+  
+  // Dla kodów o innych długościach, jeśli kończą się zerami i mają więcej niż 4 cyfry
+  // usuń końcowe zera, ale zostaw co najmniej 4 cyfry
+  if (cleaned.length > 4 && cleaned.endsWith('0')) {
+    let normalized = cleaned.replace(/0+$/, '');
+    
+    // Zawsze zostaw co najmniej 4 cyfry
+    if (normalized.length < 4) {
+      normalized = cleaned.substring(0, 4);
+    }
+    
+    return normalized;
+  }
+  
+  return cleaned;
+}
+
 async function verifyHSCode(code, env) {
   try {
-    const cleanedCode = code.replace(/\D/g, '');
+    // Normalizuj kod - usuń końcowe zera dla kodów > 4 cyfr
+    let cleanedCode = normalizeHSCode(code);
+    
+    console.log(`🔍 Weryfikacja kodu: oryginalny=${code}, znormalizowany=${cleanedCode}`);
     
     if (cleanedCode.length < 4 || cleanedCode.length > 10) {
       return {
@@ -170,6 +213,8 @@ async function verifyHSCode(code, env) {
     const allMatchingCodes = Object.keys(database)
       .filter(k => k.startsWith(cleanedCode))
       .sort();
+    
+    console.log(`📊 Znaleziono ${allMatchingCodes.length} pasujących kodów dla ${cleanedCode}`);
     
     // 2. Podziel na dokładne dopasowanie i podkody
     const exactMatch = allMatchingCodes.find(k => k === cleanedCode);
