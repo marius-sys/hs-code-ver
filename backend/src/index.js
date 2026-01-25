@@ -166,20 +166,23 @@ async function verifyHSCode(code, env) {
     const isSanctioned = await checkIfSanctioned(cleanedCode, env);
     const isControlled = await checkIfControlled(cleanedCode, env);
     
-    // 1. Sprawdź dokładne dopasowanie
-    const exactMatch = database[cleanedCode];
-    if (exactMatch) {
-      const formattedDescription = formatDescription(exactMatch);
-      
+    // 1. Znajdź wszystkie kody, które zaczynają się od cleanedCode (w tym dokładne dopasowanie)
+    const allMatchingCodes = Object.keys(database)
+      .filter(k => k.startsWith(cleanedCode))
+      .sort();
+    
+    // 2. Podziel na dokładne dopasowanie i podkody
+    const exactMatch = allMatchingCodes.find(k => k === cleanedCode);
+    const subCodes = allMatchingCodes.filter(k => k !== cleanedCode);
+    
+    // Jeśli nie znaleziono żadnego pasującego kodu
+    if (allMatchingCodes.length === 0) {
       const result = {
-        success: true,
+        success: false,
         code: cleanedCode,
-        description: exactMatch,
-        formattedDescription: formattedDescription,
+        description: 'Kod nieznany w systeme ISZTAR',
         source: 'isztar_delta_database',
-        isValid: !(isSanctioned || isControlled),
-        lastUpdated: await getLastSyncDate(env),
-        cached: (Date.now() - cacheTimestamp) < CACHE_TTL,
+        isValid: false,
         sanctioned: isSanctioned,
         controlled: isControlled
       };
@@ -197,14 +200,41 @@ async function verifyHSCode(code, env) {
       return result;
     }
     
-    // 2. Znajdź kody, które zaczynają się od cleanedCode (kody szczegółowe)
-    const detailedCodes = Object.keys(database)
-      .filter(k => k.startsWith(cleanedCode))
-      .sort();
+    // 3. Jeśli nie ma podkodów - to jest kod końcowy
+    if (subCodes.length === 0) {
+      const description = database[exactMatch];
+      const formattedDescription = formatDescription(description);
+      
+      const result = {
+        success: true,
+        code: cleanedCode,
+        description: description,
+        formattedDescription: formattedDescription,
+        source: 'isztar_delta_database',
+        isValid: !(isSanctioned || isControlled),
+        lastUpdated: await getLastSyncDate(env),
+        cached: (Date.now() - cacheTimestamp) < CACHE_TTL,
+        sanctioned: isSanctioned,
+        controlled: isControlled,
+        isFinalCode: true
+      };
+      
+      if (isSanctioned || isControlled) {
+        result.specialStatus = isSanctioned ? 'SANKCJE' : 'SANEPID';
+        if (isSanctioned) {
+          result.sanctionMessage = 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!';
+        }
+        if (isControlled) {
+          result.controlMessage = 'UWAGA: Towar podlega kontroli SANEPID - wymagane dokumenty sanitarne!';
+        }
+      }
+      
+      return result;
+    }
     
-    // 3. Jeśli znaleziono dokładnie jeden kod szczegółowy
-    if (detailedCodes.length === 1) {
-      const singleCode = detailedCodes[0];
+    // 4. Jeśli jest JEDEN podkod i NIE MA dokładnego dopasowania - rozszerz do pełnego kodu
+    if (subCodes.length === 1 && !exactMatch) {
+      const singleCode = subCodes[0];
       const paddedCode = singleCode.padEnd(10, '0');
       const formattedDescription = formatDescription(database[singleCode]);
       
@@ -234,9 +264,12 @@ async function verifyHSCode(code, env) {
       return result;
     }
     
-    // 4. Jeśli znaleziono wiele kodów szczegółowych
-    if (detailedCodes.length > 1) {
-      const description = `Kod ogólny, zawiera ${detailedCodes.length} podkodów`;
+    // 5. Jeśli jest WIELE podkodów lub (JEDEN podkod i dokładne dopasowanie) - to kod ogólny
+    if (subCodes.length > 0) {
+      const description = exactMatch 
+        ? database[exactMatch] 
+        : `Kod ogólny, zawiera ${subCodes.length} podkodów`;
+      
       const formattedDescription = formatDescription(description);
       
       const result = {
@@ -244,11 +277,12 @@ async function verifyHSCode(code, env) {
         code: cleanedCode,
         description: description,
         formattedDescription: formattedDescription,
-        details: detailedCodes.slice(0, 10),
-        totalSubcodes: detailedCodes.length,
+        details: subCodes.slice(0, 10),
+        totalSubcodes: subCodes.length,
         source: 'isztar_delta_database',
         isValid: !(isSanctioned || isControlled),
         isGeneralCode: true,
+        hasExactMatch: !!exactMatch,
         sanctioned: isSanctioned,
         controlled: isControlled
       };
@@ -266,28 +300,13 @@ async function verifyHSCode(code, env) {
       return result;
     }
     
-    // 5. Jeśli nie znaleziono żadnego pasującego kodu
-    const result = {
+    // 6. Fallback - nie powinno się zdarzyć
+    return {
       success: false,
       code: cleanedCode,
-      description: 'Kod nieznany w systeme ISZTAR',
-      source: 'isztar_delta_database',
-      isValid: false,
-      sanctioned: isSanctioned,
-      controlled: isControlled
+      description: 'Nieznany błąd weryfikacji',
+      error: 'UNKNOWN_ERROR'
     };
-    
-    if (isSanctioned || isControlled) {
-      result.specialStatus = isSanctioned ? 'SANKCJE' : 'SANEPID';
-      if (isSanctioned) {
-        result.sanctionMessage = 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!';
-      }
-      if (isControlled) {
-        result.controlMessage = 'UWAGA: Towar podlega kontroli SANEPID - wymagane dokumenty sanitarne!';
-      }
-    }
-    
-    return result;
     
   } catch (error) {
     console.error('Błąd weryfikacji:', error);
