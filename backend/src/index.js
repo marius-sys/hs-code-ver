@@ -197,17 +197,7 @@ async function verifyHSCode(code, env) {
       return result;
     }
     
-    // 2. Znajdź kody, które zaczynają się od cleanedCode (kody szczegółowe)
-    const detailedCodes = Object.keys(database)
-      .filter(k => k.startsWith(cleanedCode))
-      .sort();
-    
-    // 3. Znajdź kody, które są prefiksami cleanedCode (kody ogólne)
-    const generalCodes = Object.keys(database)
-      .filter(k => cleanedCode.startsWith(k))
-      .sort((a, b) => b.length - a.length);
-    
-    // 4. Jeśli kod ma 10 cyfr i nie ma dokładnego dopasowania - NIE ZNAJDUJEMY!
+    // 2. Jeśli kod ma 10 cyfr i nie ma dokładnego dopasowania - NIE ZNAJDUJEMY!
     if (cleanedCode.length === 10) {
       const result = {
         success: false,
@@ -232,9 +222,14 @@ async function verifyHSCode(code, env) {
       return result;
     }
     
-    // 5. Jeśli znaleziono dokładnie jeden kod szczegółowy
-    if (detailedCodes.length === 1) {
-      const singleCode = detailedCodes[0];
+    // 3. Dla kodów 4-9 cyfrowych: szukamy tylko kodów, które zaczynają się od wprowadzonego kodu
+    const codesStartingWithCleaned = Object.keys(database)
+      .filter(k => k.startsWith(cleanedCode))
+      .sort();
+    
+    // 4. Jeśli znaleziono dokładnie jeden kod szczegółowy
+    if (codesStartingWithCleaned.length === 1) {
+      const singleCode = codesStartingWithCleaned[0];
       const paddedCode = singleCode.padEnd(10, '0');
       const formattedDescription = formatDescription(database[singleCode]);
       
@@ -264,9 +259,9 @@ async function verifyHSCode(code, env) {
       return result;
     }
     
-    // 6. Jeśli znaleziono wiele kodów szczegółowych
-    if (detailedCodes.length > 1) {
-      const description = `Kod ogólny, zawiera ${detailedCodes.length} podkodów`;
+    // 5. Jeśli znaleziono wiele kodów szczegółowych
+    if (codesStartingWithCleaned.length > 1) {
+      const description = `Kod ogólny, zawiera ${codesStartingWithCleaned.length} podkodów`;
       const formattedDescription = formatDescription(description);
       
       const result = {
@@ -274,8 +269,8 @@ async function verifyHSCode(code, env) {
         code: cleanedCode,
         description: description,
         formattedDescription: formattedDescription,
-        details: detailedCodes.slice(0, 10),
-        totalSubcodes: detailedCodes.length,
+        details: codesStartingWithCleaned.slice(0, 10),
+        totalSubcodes: codesStartingWithCleaned.length,
         source: 'isztar_delta_database',
         isValid: !(isSanctioned || isControlled),
         isGeneralCode: true,
@@ -296,80 +291,7 @@ async function verifyHSCode(code, env) {
       return result;
     }
     
-    // 7. Jeśli znaleziono kody ogólne (prefiksy)
-    if (generalCodes.length > 0) {
-      const longestPrefix = generalCodes[0];
-      
-      const allCodesWithPrefix = Object.keys(database)
-        .filter(k => k.startsWith(longestPrefix))
-        .sort();
-      
-      const codesStartingWithCleaned = Object.keys(database)
-        .filter(k => k.startsWith(cleanedCode))
-        .sort();
-      
-      if (codesStartingWithCleaned.length > 0) {
-        const description = `Kod ogólny, zawiera ${codesStartingWithCleaned.length} podkodów`;
-        const formattedDescription = formatDescription(description);
-        
-        const result = {
-          success: true,
-          code: cleanedCode,
-          description: description,
-          formattedDescription: formattedDescription,
-          details: codesStartingWithCleaned.slice(0, 10),
-          totalSubcodes: codesStartingWithCleaned.length,
-          source: 'isztar_delta_database',
-          isValid: !(isSanctioned || isControlled),
-          isGeneralCode: true,
-          sanctioned: isSanctioned,
-          controlled: isControlled
-        };
-        
-        if (isSanctioned || isControlled) {
-          result.specialStatus = isSanctioned ? 'SANKCJE' : 'SANEPID';
-          if (isSanctioned) {
-            result.sanctionMessage = 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!';
-          }
-          if (isControlled) {
-            result.controlMessage = 'UWAGA: Towar podlega kontroli SANEPID - wymagane dokumenty sanitarne!';
-          }
-        }
-        
-        return result;
-      }
-      
-      const paddedCode = cleanedCode.padEnd(10, '0');
-      const formattedDescription = formatDescription(database[longestPrefix]);
-      
-      const result = {
-        success: true,
-        code: paddedCode,
-        originalCode: cleanedCode,
-        description: database[longestPrefix],
-        formattedDescription: formattedDescription,
-        source: 'isztar_delta_database',
-        isValid: !(isSanctioned || isControlled),
-        isExtendedFromPrefix: true,
-        matchedPrefix: longestPrefix,
-        sanctioned: isSanctioned,
-        controlled: isControlled
-      };
-      
-      if (isSanctioned || isControlled) {
-        result.specialStatus = isSanctioned ? 'SANKCJE' : 'SANEPID';
-        if (isSanctioned) {
-          result.sanctionMessage = 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!';
-        }
-        if (isControlled) {
-          result.controlMessage = 'UWAGA: Towar podlega kontroli SANEPID - wymagane dokumenty sanitarne!';
-        }
-      }
-      
-      return result;
-    }
-    
-    // 8. Jeśli nie znaleziono żadnego pasującego kodu
+    // 6. Jeśli nie znaleziono żadnego pasującego kodu
     const result = {
       success: false,
       code: cleanedCode,
