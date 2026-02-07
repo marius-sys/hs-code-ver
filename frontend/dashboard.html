@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Q4Rail - Panel użytkownika</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/login.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <img src="logo.svg" alt="Q4Rail Logo" class="logo-image">
+                <h2>HS VERIFIER</h2>
+                <p class="version">v2.0.0</p>
+            </div>
+
+            <nav class="sidebar-nav">
+                <ul>
+                    <li>
+                        <a href="#verify" class="nav-link active" data-page="verify">
+                            <i class="fas fa-barcode"></i>
+                            <span>Weryfikacja kodów</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#history" class="nav-link" data-page="history">
+                            <i class="fas fa-history"></i>
+                            <span>Historia wyszukiwań</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#profile" class="nav-link" data-page="profile">
+                            <i class="fas fa-user"></i>
+                            <span>Mój profil</span>
+                        </a>
+                    </li>
+                    <li id="admin-menu" class="hidden">
+                        <a href="#admin" class="nav-link" data-page="admin">
+                            <i class="fas fa-shield-alt"></i>
+                            <span>Panel administratora</span>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="avatar">
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                    <div>
+                        <strong id="username-display"></strong>
+                        <small id="user-role"></small>
+                    </div>
+                </div>
+                <button id="logoutBtn" class="btn-logout">
+                    <i class="fas fa-sign-out-alt"></i> Wyloguj
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="content-header">
+                <h1 id="page-title">Weryfikacja kodów HS</h1>
+                <div class="header-info">
+                    <span id="last-login"></span>
+                    <span class="status online" id="connection-status">
+                        <i class="fas fa-circle"></i> Połączono z API
+                    </span>
+                </div>
+            </header>
+
+            <!-- Pages -->
+            <div id="verify-page" class="page active">
+                <!-- Tutaj przeniesiona zawartość z poprzedniego index.html (bez header/footer) -->
+                <div class="card">
+                    <h2><i class="fas fa-barcode"></i> Wprowadź kod HS</h2>
+                    <div class="input-group">
+                        <input type="text" id="hsCode" placeholder="np. 2204, 2204 10, 2204-10-00" maxlength="20">
+                        <button id="verifyBtn" class="btn-primary">
+                            <i class="fas fa-check-circle"></i> Sprawdź kod
+                        </button>
+                    </div>
+                    <div class="examples">
+                        <small>Szybkie przykłady: </small>
+                        <button class="btn-example" data-code="0101">0101 (Konie)</button>
+                        <button class="btn-example" data-code="2204 10">2204 10 (Wino)</button>
+                        <button class="btn-example" data-code="8703">8703 (Samochody)</button>
+                        <button class="btn-example" data-code="9999">9999 (Test)</button>
+                    </div>
+                </div>
+
+                <div id="loading" class="loading hidden">
+                    <div class="spinner"></div>
+                    <p>Weryfikacja kodu w systemie celno-transportowym...</p>
+                </div>
+
+                <div id="result" class="card hidden">
+                    <h2><i class="fas fa-clipboard-check"></i> Wynik weryfikacji</h2>
+                    
+                    <div id="sanction-warning-top" class="sanction-warning-top hidden">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <div>
+                            <strong id="sanction-message">UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!</strong>
+                            <p style="margin-top: 8px; font-size: 0.9rem; font-weight: normal;">
+                                Ten kod HS podlega specjalnym regulacjom i ograniczeniom w handlu międzynarodowym.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div id="controlled-warning-top" class="controlled-warning-top hidden">
+                        <i class="fas fa-clipboard-check"></i>
+                        <div>
+                            <strong id="controlled-message">UWAGA: Towar podlega kontroli SANEPID!</strong>
+                            <p style="margin-top: 8px; font-size: 0.9rem; font-weight: normal;">
+                                Wymagane dokumenty sanitarne: świadectwo weterynaryjne, certyfikat fitosanitarny.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div class="result-item">
+                        <strong>Kod HS:</strong> 
+                        <span id="result-code" style="font-family: 'Courier New', monospace; font-weight: bold; font-size: 1.2rem; margin-left: 10px;"></span>
+                    </div>
+                    <div class="result-item">
+                        <strong>Opis towaru:</strong> 
+                        <span id="result-desc" style="margin-left: 10px; line-height: 1.5;"></span>
+                    </div>
+                    <div class="result-item">
+                        <strong>Status weryfikacji:</strong> 
+                        <span id="result-status" style="margin-left: 10px;"></span>
+                    </div>
+                    
+                    <div id="extended-code-info" class="result-item hidden">
+                        <strong>Pełny kod 10-cyfrowy:</strong> 
+                        <span id="extended-code" style="margin-left: 10px;"></span>
+                    </div>
+                    
+                    <button id="newBtn" class="btn-secondary">
+                        <i class="fas fa-redo-alt"></i> Sprawdź kolejny kod
+                    </button>
+                </div>
+
+                <div class="info-cards">
+                    <div class="info-card">
+                        <i class="fas fa-database"></i>
+                        <h3>Aktualna baza ISZTAR</h3>
+                        <p>Synchronizacja delta z systemem Ministerstwa Finansów</p>
+                    </div>
+                    <div class="info-card">
+                        <i class="fas fa-bolt"></i>
+                        <h3>Szybka weryfikacja</h3>
+                        <p>Cache w pamięci dla natychmiastowych wyników</p>
+                    </div>
+                    <div class="info-card">
+                        <i class="fas fa-shield-alt"></i>
+                        <h3>System sankcyjny</h3>
+                        <p>Automatyczne wykrywanie kodów z ograniczeniami</p>
+                    </div>
+                    <div class="info-card">
+                        <i class="fas fa-shipping-fast"></i>
+                        <h3>Dla transportu</h3>
+                        <p>Optymalizacja procesów celnych w logistyce</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- History Page -->
+            <div id="history-page" class="page hidden">
+                <div class="card">
+                    <h2><i class="fas fa-history"></i> Historia wyszukiwań</h2>
+                    <div class="filters">
+                        <div class="filter-group">
+                            <label for="date-from">Od:</label>
+                            <input type="date" id="date-from">
+                        </div>
+                        <div class="filter-group">
+                            <label for="date-to">Do:</label>
+                            <input type="date" id="date-to">
+                        </div>
+                        <button id="filter-btn" class="btn-secondary">
+                            <i class="fas fa-filter"></i> Filtruj
+                        </button>
+                        <button id="export-btn" class="btn-secondary">
+                            <i class="fas fa-download"></i> Eksportuj
+                        </button>
+                    </div>
+                    
+                    <div class="table-container">
+                        <table id="history-table">
+                            <thead>
+                                <tr>
+                                    <th>Data i godzina</th>
+                                    <th>Kod HS</th>
+                                    <th>Status</th>
+                                    <th>Wynik</th>
+                                    <th>Akcje</th>
+                                </tr>
+                            </thead>
+                            <tbody id="history-body">
+                                <!-- Dane będą wczytywane dynamicznie -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="pagination" class="pagination"></div>
+                </div>
+            </div>
+
+            <!-- Profile Page -->
+            <div id="profile-page" class="page hidden">
+                <div class="card">
+                    <h2><i class="fas fa-user"></i> Mój profil</h2>
+                    <div class="profile-info">
+                        <div class="avatar-large">
+                            <i class="fas fa-user-circle"></i>
+                        </div>
+                        <div class="profile-details">
+                            <div class="detail">
+                                <strong>Nazwa użytkownika:</strong>
+                                <span id="profile-username"></span>
+                            </div>
+                            <div class="detail">
+                                <strong>Rola:</strong>
+                                <span id="profile-role"></span>
+                            </div>
+                            <div class="detail">
+                                <strong>Data rejestracji:</strong>
+                                <span id="profile-registration"></span>
+                            </div>
+                            <div class="detail">
+                                <strong>Ostatnie logowanie:</strong>
+                                <span id="profile-last-login"></span>
+                            </div>
+                            <div class="detail">
+                                <strong>Liczba wyszukiwań:</strong>
+                                <span id="profile-search-count"></span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="profile-actions">
+                        <button id="change-password-btn" class="btn-secondary">
+                            <i class="fas fa-key"></i> Zmień hasło
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Admin Page -->
+            <div id="admin-page" class="page hidden">
+                <div class="card">
+                    <h2><i class="fas fa-shield-alt"></i> Panel administratora</h2>
+                    
+                    <div class="admin-tabs">
+                        <button class="admin-tab active" data-tab="users">Użytkownicy</button>
+                        <button class="admin-tab" data-tab="logs">Logi systemowe</button>
+                        <button class="admin-tab" data-tab="system">System</button>
+                    </div>
+                    
+                    <!-- Users Tab -->
+                    <div id="users-tab" class="admin-tab-content active">
+                        <div class="admin-header">
+                            <h3>Zarządzanie użytkownikami</h3>
+                            <button id="add-user-btn" class="btn-primary">
+                                <i class="fas fa-user-plus"></i> Dodaj użytkownika
+                            </button>
+                        </div>
+                        
+                        <table id="users-table">
+                            <thead>
+                                <tr>
+                                    <th>Nazwa użytkownika</th>
+                                    <th>Rola</th>
+                                    <th>Data rejestracji</th>
+                                    <th>Ostatnie logowanie</th>
+                                    <th>Status</th>
+                                    <th>Akcje</th>
+                                </tr>
+                            </thead>
+                            <tbody id="users-body">
+                                <!-- Dane będą wczytywane dynamicznie -->
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Logs Tab -->
+                    <div id="logs-tab" class="admin-tab-content hidden">
+                        <h3>Logi systemowe</h3>
+                        <div class="filters">
+                            <input type="text" id="log-search" placeholder="Szukaj...">
+                            <select id="log-level">
+                                <option value="">Wszystkie poziomy</option>
+                                <option value="info">Info</option>
+                                <option value="warning">Warning</option>
+                                <option value="error">Error</option>
+                            </select>
+                            <button id="refresh-logs" class="btn-secondary">
+                                <i class="fas fa-sync"></i> Odśwież
+                            </button>
+                        </div>
+                        
+                        <div class="logs-container">
+                            <pre id="system-logs">Ładowanie logów...</pre>
+                        </div>
+                    </div>
+                    
+                    <!-- System Tab -->
+                    <div id="system-tab" class="admin-tab-content hidden">
+                        <h3>Statystyki systemu</h3>
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <i class="fas fa-users"></i>
+                                <h4>Aktywni użytkownicy</h4>
+                                <p id="active-users">0</p>
+                            </div>
+                            <div class="stat-card">
+                                <i class="fas fa-search"></i>
+                                <h4>Wyszukania dzisiaj</h4>
+                                <p id="today-searches">0</p>
+                            </div>
+                            <div class="stat-card">
+                                <i class="fas fa-database"></i>
+                                <h4>Rozmiar bazy HS</h4>
+                                <p id="db-size">0</p>
+                            </div>
+                            <div class="stat-card">
+                                <i class="fas fa-chart-line"></i>
+                                <h4>API Requesty (24h)</h4>
+                                <p id="api-requests">0</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div id="add-user-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-user-plus"></i> Dodaj nowego użytkownika</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="add-user-form">
+                    <div class="form-group">
+                        <label for="new-username">Nazwa użytkownika *</label>
+                        <input type="text" id="new-username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="new-password">Hasło *</label>
+                        <input type="password" id="new-password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirm-password">Potwierdź hasło *</label>
+                        <input type="password" id="confirm-password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="user-role">Rola *</label>
+                        <select id="user-role-select">
+                            <option value="user">Użytkownik</option>
+                            <option value="admin">Administrator</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary modal-cancel">Anuluj</button>
+                <button id="save-user-btn" class="btn-primary">Zapisz użytkownika</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="change-password-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-key"></i> Zmiana hasła</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="change-password-form">
+                    <div class="form-group">
+                        <label for="current-password">Aktualne hasło *</label>
+                        <input type="password" id="current-password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="new-password-change">Nowe hasło *</label>
+                        <input type="password" id="new-password-change" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirm-new-password">Potwierdź nowe hasło *</label>
+                        <input type="password" id="confirm-new-password" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary modal-cancel">Anuluj</button>
+                <button id="save-password-btn" class="btn-primary">Zmień hasło</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/dashboard.js"></script>
+    <script src="js/admin.js"></script>
+</body>
+</html>

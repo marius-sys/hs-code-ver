@@ -1,5 +1,10 @@
 import { syncIsztarData } from './sync.js';
 
+// Import nowych modułów
+import AuthService from './auth.js';
+import UserService from './users.js';
+import LogService from './logs.js';
+
 const RATE_LIMIT = {
   maxRequests: 20000,
   windowMs: 24 * 60 * 60 * 1000,
@@ -10,6 +15,40 @@ const dailyTracker = new Map();
 let hsDatabaseCache = null;
 let cacheTimestamp = 0;
 const CACHE_TTL = 5 * 60 * 1000;
+
+// Middleware autoryzacji
+async function requireAuth(request, env) {
+    const authHeader = request.headers.get('Authorization');
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return { authenticated: false, error: 'Brak tokena autoryzacyjnego' };
+    }
+    
+    const token = authHeader.substring(7);
+    const authService = new AuthService(env.USERS_DB);
+    const user = await authService.authenticate(token);
+    
+    if (!user) {
+        return { authenticated: false, error: 'Nieprawidłowy lub wygasły token' };
+    }
+    
+    return { authenticated: true, user };
+}
+
+// Middleware dla endpointów wymagających admina
+async function requireAdmin(request, env) {
+    const authResult = await requireAuth(request, env);
+    
+    if (!authResult.authenticated) {
+        return authResult;
+    }
+    
+    if (authResult.user.role !== 'admin') {
+        return { authenticated: false, error: 'Brak uprawnień administratora' };
+    }
+    
+    return authResult;
+}
 
 function checkRateLimit(ip) {
   const today = new Date().toISOString().split('T')[0];
@@ -388,38 +427,77 @@ async function handleCron(env, ctx) {
   return result;
 }
 
+// Logowanie aktywności wyszukiwań
+async function logSearchActivity(env, userId, searchData, result) {
+  try {
+    if (!env.LOGS_DB) {
+      console.warn('⚠️ Brak bindingu LOGS_DB - nie można zapisać logu');
+      return;
+    }
+    
+    const logService = new LogService(env.LOGS_DB);
+    const ip = searchData.headers.get('CF-Connecting-IP') || 'unknown';
+    const userAgent = searchData.headers.get('User-Agent') || 'unknown';
+    
+    await logService.logSearch(userId, {
+      ...searchData,
+      ip,
+      userAgent
+    }, result);
+    
+    console.log(`📝 Zapisano log wyszukiwania dla użytkownika ${userId}`);
+  } catch (error) {
+    console.error('Błąd logowania aktywności:', error);
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     
     const corsHeaders = {
       'Access-Control-Allow-Origin': env.ALLOWED_ORIGINS || '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Cron-Secret'
     };
     
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
     }
     
-    if (url.pathname === '/cron/sync' && request.method === 'POST') {
-      const cronSecret = request.headers.get('X-Cron-Secret');
-      if (!env.CRON_SECRET || cronSecret !== env.CRON_SECRET) {
-        return new Response('Unauthorized', { 
-          status: 401,
-          headers: corsHeaders 
-        });
+    // ==================== PUBLIC ENDPOINTS ====================
+    
+    // Endpoint logowania (publiczny)
+    if (url.pathname === '/api/auth/login' && request.method === 'POST') {
+      try {
+        const body = await request.json();
+        const { username, password } = body;
+        
+        if (!username || !password) {
+          return Response.json(
+            { success: false, error: 'Nazwa użytkownika i hasło są wymagane' },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+        
+        const authService = new AuthService(env.USERS_DB);
+        const result = await authService.login(username, password);
+        
+        if (!result.success) {
+          return Response.json(result, { status: 401, headers: corsHeaders });
+        }
+        
+        return Response.json(result, { headers: corsHeaders });
+      } catch (error) {
+        console.error('Błąd logowania:', error);
+        return Response.json(
+          { success: false, error: 'Nieprawidłowy format danych' },
+          { status: 400, headers: corsHeaders }
+        );
       }
-      
-      ctx.waitUntil(handleCron(env, ctx));
-      
-      return Response.json({
-        success: true,
-        message: 'Synchronizacja CRON uruchomiona',
-        timestamp: new Date().toISOString()
-      }, { headers: corsHeaders });
     }
     
+    // Health check (publiczny)
     if (url.pathname === '/health' && request.method === 'GET') {
       try {
         const hasDatabase = !!env.HS_DATABASE;
@@ -427,6 +505,7 @@ export default {
         let databaseSize = 0;
         let sanctionedCount = 0;
         let controlledCount = 0;
+        let userCount = 0;
         
         if (hasDatabase) {
           try {
@@ -448,6 +527,19 @@ export default {
           }
         }
         
+        // Liczba użytkowników
+        if (env.USERS_DB) {
+          try {
+            const userService = new UserService(env.USERS_DB);
+            const usersResult = await userService.getAllUsers();
+            if (usersResult.success) {
+              userCount = usersResult.users.length;
+            }
+          } catch (error) {
+            console.log('Błąd odczytu użytkowników:', error.message);
+          }
+        }
+        
         return Response.json({
           status: 'healthy',
           version: env.VERSION,
@@ -458,6 +550,10 @@ export default {
             lastSync: metadata ? metadata.lastSync : 'Nigdy',
             totalRecords: databaseSize,
             status: hasDatabase ? 'ok' : 'no_binding'
+          },
+          users: {
+            totalUsers: userCount,
+            authEnabled: true
           },
           sanctions: {
             totalCodes: sanctionedCount
@@ -476,7 +572,53 @@ export default {
       }
     }
     
+    // Root endpoint (publiczny)
+    if (url.pathname === '/' && request.method === 'GET') {
+      return Response.json({
+        name: 'HS Code Verifier API v2.0.0',
+        version: env.VERSION,
+        description: 'System weryfikacji kodów celnych HS z bazą ISZTAR i autoryzacją',
+        worker: 'hs-code-verifier-api',
+        url: 'https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev',
+        endpoints: {
+          public: [
+            'POST /api/auth/login - Logowanie użytkownika',
+            'GET /health - Status zdrowia systemu'
+          ],
+          authenticated: [
+            'POST /verify - Weryfikacja kodu HS',
+            'GET /api/user/history - Historia wyszukiwań użytkownika',
+            'GET /api/user/profile - Profil użytkownika'
+          ],
+          admin: [
+            'GET /api/admin/users - Lista użytkowników (admin)',
+            'POST /api/admin/users - Dodaj użytkownika (admin)',
+            'DELETE /api/admin/users/:id - Usuń użytkownika (admin)'
+          ],
+          system: [
+            'GET /stats - Statystyki bazy danych',
+            'GET /sanctions - Lista kodów sankcyjnych',
+            'GET /controlled - Lista kodów pod kontrolą SANEPID'
+          ]
+        },
+        timestamp: new Date().toISOString()
+      }, { headers: corsHeaders });
+    }
+    
+    // ==================== PROTECTED ENDPOINTS ====================
+    
+    // Weryfikacja kodu HS (wymaga autoryzacji)
     if (url.pathname === '/verify' && request.method === 'POST') {
+      // Sprawdzenie autoryzacji
+      const authResult = await requireAuth(request, env);
+      if (!authResult.authenticated) {
+        return Response.json(
+          { error: authResult.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      
+      // Limitowanie zapytań
       const clientIP = getClientIP(request);
       if (!checkRateLimit(clientIP)) {
         return Response.json(
@@ -506,8 +648,14 @@ export default {
         }
         
         const result = await verifyHSCode(code, env);
-        return Response.json(result, { headers: corsHeaders });
         
+        // Logowanie aktywności
+        await logSearchActivity(env, authResult.user.userId, {
+          code: code,
+          headers: request.headers
+        }, result);
+        
+        return Response.json(result, { headers: corsHeaders });
       } catch (error) {
         return Response.json(
           { error: 'Nieprawidłowy format danych' },
@@ -516,6 +664,258 @@ export default {
       }
     }
     
+    // Historia wyszukiwań użytkownika
+    if (url.pathname === '/api/user/history' && request.method === 'GET') {
+      const authResult = await requireAuth(request, env);
+      if (!authResult.authenticated) {
+        return Response.json(
+          { error: authResult.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      
+      const searchParams = url.searchParams;
+      const filters = {
+        startDate: searchParams.get('startDate'),
+        endDate: searchParams.get('endDate'),
+        limit: parseInt(searchParams.get('limit')) || 50,
+        offset: parseInt(searchParams.get('offset')) || 0
+      };
+      
+      try {
+        const logService = new LogService(env.LOGS_DB);
+        const result = await logService.getUserSearchHistory(authResult.user.userId, filters);
+        
+        return Response.json(result, { headers: corsHeaders });
+      } catch (error) {
+        console.error('Błąd pobierania historii:', error);
+        return Response.json(
+          { success: false, error: 'Błąd pobierania historii' },
+          { status: 500, headers: corsHeaders }
+        );
+      }
+    }
+    
+    // Profil użytkownika
+    if (url.pathname === '/api/user/profile' && request.method === 'GET') {
+      const authResult = await requireAuth(request, env);
+      if (!authResult.authenticated) {
+        return Response.json(
+          { error: authResult.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      
+      try {
+        const userService = new UserService(env.USERS_DB);
+        const result = await userService.getUser(authResult.user.userId);
+        
+        if (!result.success) {
+          return Response.json(result, { status: 404, headers: corsHeaders });
+        }
+        
+        // Pobierz statystyki
+        const logService = new LogService(env.LOGS_DB);
+        const stats = await logService.getUserStats(authResult.user.userId);
+        
+        const profileData = {
+          ...result.user,
+          stats: stats.success ? stats.stats : null
+        };
+        
+        return Response.json({
+          success: true,
+          profile: profileData
+        }, { headers: corsHeaders });
+      } catch (error) {
+        console.error('Błąd pobierania profilu:', error);
+        return Response.json(
+          { success: false, error: 'Błąd pobierania profilu' },
+          { status: 500, headers: corsHeaders }
+        );
+      }
+    }
+    
+    // Zmiana hasła
+    if (url.pathname === '/api/user/change-password' && request.method === 'POST') {
+      const authResult = await requireAuth(request, env);
+      if (!authResult.authenticated) {
+        return Response.json(
+          { error: authResult.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      
+      try {
+        const body = await request.json();
+        const { currentPassword, newPassword } = body;
+        
+        if (!currentPassword || !newPassword) {
+          return Response.json(
+            { success: false, error: 'Obecne i nowe hasło są wymagane' },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+        
+        if (newPassword.length < 8) {
+          return Response.json(
+            { success: false, error: 'Nowe hasło musi mieć co najmniej 8 znaków' },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+        
+        const authService = new AuthService(env.USERS_DB);
+        const result = await authService.changePassword(
+          authResult.user.userId,
+          currentPassword,
+          newPassword
+        );
+        
+        return Response.json(result, { 
+          status: result.success ? 200 : 400,
+          headers: corsHeaders 
+        });
+      } catch (error) {
+        console.error('Błąd zmiany hasła:', error);
+        return Response.json(
+          { success: false, error: 'Nieprawidłowy format danych' },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+    
+    // ==================== ADMIN ENDPOINTS ====================
+    
+    // Zarządzanie użytkownikami (tylko admin)
+    if (url.pathname.startsWith('/api/admin/users')) {
+      const authResult = await requireAdmin(request, env);
+      if (!authResult.authenticated) {
+        return Response.json(
+          { error: authResult.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      
+      // Pobierz wszystkich użytkowników
+      if (url.pathname === '/api/admin/users' && request.method === 'GET') {
+        try {
+          const userService = new UserService(env.USERS_DB);
+          const result = await userService.getAllUsers();
+          
+          return Response.json(result, { headers: corsHeaders });
+        } catch (error) {
+          console.error('Błąd pobierania użytkowników:', error);
+          return Response.json(
+            { success: false, error: 'Błąd pobierania użytkowników' },
+            { status: 500, headers: corsHeaders }
+          );
+        }
+      }
+      
+      // Dodaj nowego użytkownika
+      if (url.pathname === '/api/admin/users' && request.method === 'POST') {
+        try {
+          const body = await request.json();
+          const { username, password, role, email } = body;
+          
+          if (!username || !password) {
+            return Response.json(
+              { success: false, error: 'Nazwa użytkownika i hasło są wymagane' },
+              { status: 400, headers: corsHeaders }
+            );
+          }
+          
+          if (password.length < 8) {
+            return Response.json(
+              { success: false, error: 'Hasło musi mieć co najmniej 8 znaków' },
+              { status: 400, headers: corsHeaders }
+            );
+          }
+          
+          const authService = new AuthService(env.USERS_DB);
+          const result = await authService.registerUser({
+            username,
+            password,
+            role: role || 'user',
+            email: email || ''
+          }, authResult.user.userId);
+          
+          return Response.json(result, { 
+            status: result.success ? 201 : 400,
+            headers: corsHeaders 
+          });
+        } catch (error) {
+          console.error('Błąd tworzenia użytkownika:', error);
+          return Response.json(
+            { success: false, error: 'Nieprawidłowy format danych' },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+      }
+      
+      // Usuń użytkownika
+      if (url.pathname.startsWith('/api/admin/users/') && request.method === 'DELETE') {
+        const userId = url.pathname.split('/').pop();
+        
+        if (!userId) {
+          return Response.json(
+            { success: false, error: 'Brak ID użytkownika' },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+        
+        try {
+          const userService = new UserService(env.USERS_DB);
+          const result = await userService.deleteUser(userId, authResult.user.userId);
+          
+          return Response.json(result, { 
+            status: result.success ? 200 : 400,
+            headers: corsHeaders 
+          });
+        } catch (error) {
+          console.error('Błąd usuwania użytkownika:', error);
+          return Response.json(
+            { success: false, error: 'Błąd usuwania użytkownika' },
+            { status: 500, headers: corsHeaders }
+          );
+        }
+      }
+    }
+    
+    // Logi systemowe (tylko admin)
+    if (url.pathname === '/api/admin/logs' && request.method === 'GET') {
+      const authResult = await requireAdmin(request, env);
+      if (!authResult.authenticated) {
+        return Response.json(
+          { error: authResult.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      
+      const searchParams = url.searchParams;
+      const filters = {
+        level: searchParams.get('level'),
+        search: searchParams.get('search'),
+        limit: parseInt(searchParams.get('limit')) || 100
+      };
+      
+      try {
+        const logService = new LogService(env.LOGS_DB);
+        const result = await logService.getSystemLogs(filters);
+        
+        return Response.json(result, { headers: corsHeaders });
+      } catch (error) {
+        console.error('Błąd pobierania logów:', error);
+        return Response.json(
+          { success: false, error: 'Błąd pobierania logów systemowych' },
+          { status: 500, headers: corsHeaders }
+        );
+      }
+    }
+    
+    // ==================== SYSTEM ENDPOINTS ====================
+    
+    // Statystyki systemu
     if (url.pathname === '/stats' && request.method === 'GET') {
       try {
         const hasDatabase = !!env.HS_DATABASE;
@@ -548,8 +948,24 @@ export default {
           }
         }
         
+        // Statystyki użytkowników
+        let userCount = 0;
+        let activeUsers = 0;
+        if (env.USERS_DB) {
+          try {
+            const userService = new UserService(env.USERS_DB);
+            const usersResult = await userService.getAllUsers();
+            if (usersResult.success) {
+              userCount = usersResult.users.length;
+              activeUsers = usersResult.users.filter(u => u.active).length;
+            }
+          } catch (error) {
+            console.log('Błąd odczytu statystyk użytkowników:', error.message);
+          }
+        }
+        
         return Response.json({
-          name: 'HS Code Verifier API v1.4.3',
+          name: 'HS Code Verifier API v2.0.0',
           version: env.VERSION,
           worker: 'hs-code-verifier-api',
           url: 'https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev',
@@ -558,6 +974,10 @@ export default {
             lastSync: metadata ? metadata.lastSync : 'Nigdy',
             totalRecords: databaseSize,
             changes: metadata ? metadata.changes : null
+          },
+          users: {
+            totalUsers: userCount,
+            activeUsers: activeUsers
           },
           sanctions: {
             totalCodes: sanctionedCount,
@@ -581,6 +1001,7 @@ export default {
       }
     }
     
+    // Lista kodów sankcyjnych
     if (url.pathname === '/sanctions' && request.method === 'GET') {
       try {
         const hasDatabase = !!env.HS_DATABASE;
@@ -608,6 +1029,7 @@ export default {
       }
     }
     
+    // Aktualizacja listy sankcji (wymaga tokena sync)
     if (url.pathname === '/sanctions/update' && request.method === 'POST') {
       const authToken = request.headers.get('Authorization');
       if (!env.SYNC_TOKEN || authToken !== `Bearer ${env.SYNC_TOKEN}`) {
@@ -657,6 +1079,7 @@ export default {
       }
     }
     
+    // Lista kodów pod kontrolą SANEPID
     if (url.pathname === '/controlled' && request.method === 'GET') {
       try {
         const hasDatabase = !!env.HS_DATABASE;
@@ -685,6 +1108,7 @@ export default {
       }
     }
     
+    // Aktualizacja listy kontroli SANEPID (wymaga tokena sync)
     if (url.pathname === '/controlled/update' && request.method === 'POST') {
       const authToken = request.headers.get('Authorization');
       if (!env.SYNC_TOKEN || authToken !== `Bearer ${env.SYNC_TOKEN}`) {
@@ -735,23 +1159,41 @@ export default {
       }
     }
     
-    return Response.json({
-      name: 'HS Code Verifier API v1.4.3',
-      version: env.VERSION,
-      description: 'System weryfikacji kodów celnych HS z bazą ISZTAR',
-      worker: 'hs-code-verifier-api',
-      url: 'https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev',
-      endpoints: [
-        'GET /health - Status zdrowia systemu',
-        'POST /verify - Weryfikacja kodu HS (akceptuje formaty: 1234, 1234 56, 1234-56-78)',
-        'GET /stats - Statystyki bazy danych',
-        'GET /sanctions - Lista kodów sankcyjnych',
-        'POST /sanctions/update - Aktualizacja listy sankcji (wymaga tokenu)',
-        'GET /controlled - Lista kodów pod kontrolą SANEPID',
-        'POST /controlled/update - Aktualizacja listy kontroli SANEPID (wymaga tokenu)'
-      ],
-      timestamp: new Date().toISOString()
-    }, { headers: corsHeaders });
+    // CRON synchronizacji
+    if (url.pathname === '/cron/sync' && request.method === 'POST') {
+      const cronSecret = request.headers.get('X-Cron-Secret');
+      if (!env.CRON_SECRET || cronSecret !== env.CRON_SECRET) {
+        return new Response('Unauthorized', { 
+          status: 401,
+          headers: corsHeaders 
+        });
+      }
+      
+      ctx.waitUntil(handleCron(env, ctx));
+      
+      return Response.json({
+        success: true,
+        message: 'Synchronizacja CRON uruchomiona',
+        timestamp: new Date().toISOString()
+      }, { headers: corsHeaders });
+    }
+    
+    // ==================== NOT FOUND ====================
+    
+    return Response.json(
+      { 
+        error: 'Nie znaleziono endpointu',
+        availableEndpoints: [
+          'POST /api/auth/login - Logowanie',
+          'POST /verify - Weryfikacja kodu HS (wymaga tokena)',
+          'GET /api/user/history - Historia wyszukiwań (wymaga tokena)',
+          'GET /api/user/profile - Profil użytkownika (wymaga tokena)',
+          'GET /health - Status systemu',
+          'GET /stats - Statystyki'
+        ]
+      },
+      { status: 404, headers: corsHeaders }
+    );
   },
   
   async scheduled(event, env, ctx) {

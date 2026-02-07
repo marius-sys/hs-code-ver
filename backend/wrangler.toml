@@ -1,5 +1,5 @@
 name = "hs-code-verifier-api"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-09-23"
 main = "src/index.js"
 compatibility_flags = [ "nodejs_compat" ]
 
@@ -8,13 +8,22 @@ workers_dev = true
 
 [vars]
 ENVIRONMENT = "production"
-VERSION = "1.4.3"
+VERSION = "2.0.0"
 MAX_REQUESTS_PER_DAY = 20000
 ALLOWED_ORIGINS = "https://hs-code.q4rail.com"
+JWT_SECRET = ""  # USTAWIĆ W CLOUDFLARE DASHBOARD
 
 [[kv_namespaces]]
 binding = "HS_DATABASE"
 id = "d4e909bdc6114613ab76635fadb855b2"
+
+[[kv_namespaces]]
+binding = "USERS_DB"
+id = "eb7e0cd7a2b947d48981d63396b022bc"  # UTWORZYĆ NOWY NAMESPACE DLA UŻYTKOWNIKÓW
+
+[[kv_namespaces]]
+binding = "LOGS_DB"
+id = "6d4e84b980ed4f99a5b8633d720792fe"  # UTWORZYĆ NOWY NAMESPACE DLA LOGÓW
 
 [triggers]
 crons = ["0 3 * * *"]
