@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Q4Rail - Logowanie</title>
+    <link rel="stylesheet" href="css/login.css">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="logo-section">
+                <img src="logo.svg" alt="Q4Rail Logo" class="logo-image">
+                <h1>HS CODE VERIFIER</h1>
+                <p class="subtitle">System weryfikacji kodów celnych HS</p>
+            </div>
+
+            <div id="login-form" class="form-section">
+                <h2><i class="fas fa-sign-in-alt"></i> Logowanie do systemu</h2>
+                
+                <div id="error-message" class="error-message hidden">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span id="error-text"></span>
+                </div>
+
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label for="username">
+                            <i class="fas fa-user"></i> Nazwa użytkownika
+                        </label>
+                        <input type="text" id="username" name="username" required 
+                               placeholder="Wprowadź nazwę użytkownika">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password">
+                            <i class="fas fa-lock"></i> Hasło
+                        </label>
+                        <input type="password" id="password" name="password" required 
+                               placeholder="Wprowadź hasło">
+                    </div>
+
+                    <div class="form-options">
+                        <label class="checkbox">
+                            <input type="checkbox" id="remember" name="remember">
+                            <span>Zapamiętaj mnie</span>
+                        </label>
+                    </div>
+
+                    <button type="submit" class="btn-login" id="loginBtn">
+                        <i class="fas fa-sign-in-alt"></i> Zaloguj się
+                    </button>
+                </form>
+
+                <div class="login-footer">
+                    <p><i class="fas fa-info-circle"></i> Dostęp tylko dla autoryzowanych użytkowników</p>
+                    <p class="small">Wersja systemu: 2.0.0 | Q4Rail Sp. z o.o.</p>
+                </div>
+            </div>
+
+            <div id="loading" class="loading hidden">
+                <div class="spinner"></div>
+                <p>Weryfikacja danych logowania...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/login.js"></script>
+</body>
+</html>
