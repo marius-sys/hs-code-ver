@@ -45,8 +45,9 @@ export class AuthService {
             iat: Math.floor(Date.now() / 1000)
         };
 
-        const encodedHeader = Buffer.from(JSON.stringify(header)).toString('base64').replace(/=/g, '');
-        const encodedData = Buffer.from(JSON.stringify(data)).toString('base64').replace(/=/g, '');
+        // Używamy Buffer zamiast btoa dla kompatybilności Node.js
+        const encodedHeader = Buffer.from(JSON.stringify(header)).toString('base64url');
+        const encodedData = Buffer.from(JSON.stringify(data)).toString('base64url');
         
         const signature = createHmac('sha256', JWT_SECRET)
             .update(`${encodedHeader}.${encodedData}`)
@@ -73,7 +74,7 @@ export class AuthService {
                 return null;
             }
 
-            const data = JSON.parse(Buffer.from(encodedData, 'base64').toString());
+            const data = JSON.parse(Buffer.from(encodedData, 'base64url').toString());
             
             // Sprawdzenie wygaśnięcia
             if (data.exp && data.exp < Math.floor(Date.now() / 1000)) {
@@ -87,37 +88,43 @@ export class AuthService {
         }
     }
 
-    // Logowanie użytkownika
+    // Logowanie użytkownika (case-insensitive)
     async login(username, password) {
         try {
-            console.log(`🔐 Próba logowania użytkownika: ${username}`);
+            // Konwertuj nazwę użytkownika na małe litery dla wyszukiwania
+            const normalizedUsername = username.toLowerCase();
+            
+            console.log(`🔑 Próba logowania: ${username} (znormalizowane: ${normalizedUsername})`);
             
             // 1. Znajdź mapowanie nazwa -> ID
-            const nameKey = `USER_BY_NAME:${username.toLowerCase()}`;
-            const mapping = await this.kv.get(nameKey, 'json');
+            const userMappingKey = `USER_BY_NAME:${normalizedUsername}`;
+            console.log(`   Szukam klucza: ${userMappingKey}`);
             
-            console.log(`📄 Mapowanie dla ${username}:`, mapping);
+            const userMapping = await this.kv.get(userMappingKey, 'json');
             
-            if (!mapping || !mapping.id) {
-                console.log(`❌ Brak mapowania dla użytkownika: ${username}`);
+            if (!userMapping || !userMapping.id) {
+                console.log(`   ❌ Brak mapowania dla użytkownika: ${normalizedUsername}`);
+                return {
+                    success: false,
+                    error: 'Nieprawidłowa nazwa użytkownika lub hasło'
+                };
+            }
+            
+            console.log(`   ✅ Znaleziono ID użytkownika: ${userMapping.id}`);
+
+            // 2. Pobierz dane użytkownika po ID
+            const userDataKey = `USER_BY_ID:${userMapping.id}`;
+            const userData = await this.kv.get(userDataKey, 'json');
+            
+            if (!userData) {
+                console.log(`   ❌ Brak danych użytkownika dla ID: ${userMapping.id}`);
                 return {
                     success: false,
                     error: 'Nieprawidłowa nazwa użytkownika lub hasło'
                 };
             }
 
-            // 2. Pobierz dane użytkownika
-            const userKey = `USER_BY_ID:${mapping.id}`;
-            const userData = await this.kv.get(userKey, 'json');
-            
-            console.log(`📄 Dane użytkownika ${username}:`, userData ? 'znalezione' : 'brak');
-            
-            if (!userData) {
-                return {
-                    success: false,
-                    error: 'Nieprawidłowa nazwa użytkownika lub hasło'
-                };
-            }
+            console.log(`   ✅ Znaleziono dane użytkownika: ${userData.username}`);
 
             // 3. Weryfikacja hasła
             const isValid = this.verifyPassword(
@@ -127,16 +134,16 @@ export class AuthService {
             );
 
             if (!isValid) {
-                console.log(`❌ Nieprawidłowe hasło dla użytkownika: ${username}`);
+                console.log(`   ❌ Nieprawidłowe hasło dla użytkownika: ${userData.username}`);
                 return {
                     success: false,
                     error: 'Nieprawidłowa nazwa użytkownika lub hasło'
                 };
             }
 
-            // 4. Sprawdź czy konto jest aktywne
+            // 4. Sprawdzenie czy konto jest aktywne
             if (!userData.active) {
-                console.log(`❌ Konto nieaktywne: ${username}`);
+                console.log(`   ❌ Konto nieaktywne: ${userData.username}`);
                 return {
                     success: false,
                     error: 'Konto jest nieaktywne'
@@ -147,8 +154,8 @@ export class AuthService {
             userData.lastLogin = new Date().toISOString();
             userData.loginCount = (userData.loginCount || 0) + 1;
             
-            await this.kv.put(userKey, JSON.stringify(userData));
-            console.log(`✅ Zaktualizowano dane logowania dla: ${username}`);
+            await this.kv.put(userDataKey, JSON.stringify(userData));
+            console.log(`   ✅ Zaktualizowano dane logowania dla: ${userData.username}`);
 
             // 6. Generowanie tokena
             const token = this.generateToken({
@@ -158,7 +165,7 @@ export class AuthService {
                 email: userData.email
             });
 
-            console.log(`✅ Wygenerowano token dla: ${username}`);
+            console.log(`   ✅ Wygenerowano token JWT`);
 
             return {
                 success: true,
@@ -171,7 +178,6 @@ export class AuthService {
                     lastLogin: userData.lastLogin
                 }
             };
-            
         } catch (error) {
             console.error('❌ Błąd logowania:', error);
             return {
@@ -183,39 +189,30 @@ export class AuthService {
 
     // Weryfikacja tokena
     async authenticate(token) {
-        console.log('🔍 Weryfikacja tokena...');
         const payload = this.verifyToken(token);
         
         if (!payload) {
-            console.log('❌ Token nieprawidłowy lub wygasły');
             return null;
         }
 
-        console.log(`✅ Token poprawny dla użytkownika: ${payload.username}`);
-        
         // Sprawdzenie czy użytkownik nadal istnieje
-        const userKey = `USER_BY_ID:${payload.userId}`;
-        const userData = await this.kv.get(userKey, 'json');
+        const userDataKey = `USER_BY_ID:${payload.userId}`;
+        const userData = await this.kv.get(userDataKey, 'json');
         
         if (!userData || !userData.active) {
-            console.log(`❌ Użytkownik nieaktywny lub nie istnieje: ${payload.userId}`);
             return null;
         }
 
-        console.log(`✅ Użytkownik aktywny: ${userData.username}`);
-        
         return {
             ...payload,
             userData
         };
     }
 
-    // Rejestracja nowego użytkownika (tylko admin)
+    // Rejestracja nowego użytkownika (tylko admin) - case-insensitive
     async registerUser(userData, createdBy) {
         try {
             const { username, password, role = 'user', email } = userData;
-            
-            console.log(`📝 Rejestracja nowego użytkownika: ${username}`);
             
             // Walidacja
             if (!username || !password) {
@@ -225,27 +222,40 @@ export class AuthService {
                 };
             }
 
-            // Sprawdzenie czy użytkownik już istnieje
-            const existingKey = `USER_BY_NAME:${username.toLowerCase()}`;
-            const existingUser = await this.kv.get(existingKey, 'json');
+            // Normalizacja nazwy użytkownika
+            const normalizedUsername = username.toLowerCase();
             
-            if (existingUser) {
-                return {
-                    success: false,
-                    error: 'Użytkownik o tej nazwie już istnieje'
-                };
+            // Sprawdzenie czy użytkownik już istnieje (po znormalizowanej nazwie)
+            const existingMappingKey = `USER_BY_NAME:${normalizedUsername}`;
+            const existingMapping = await this.kv.get(existingMappingKey, 'json');
+            
+            if (existingMapping && existingMapping.id) {
+                console.log(`ℹ️  Użytkownik ${normalizedUsername} już istnieje w mapowaniu`);
+                
+                // Sprawdź czy użytkownik faktycznie istnieje
+                const userDataKey = `USER_BY_ID:${existingMapping.id}`;
+                const existingUser = await this.kv.get(userDataKey, 'json');
+                
+                if (existingUser) {
+                    return {
+                        success: false,
+                        error: 'Użytkownik o tej nazwie już istnieje'
+                    };
+                }
             }
+
+            console.log(`✅ Nazwa użytkownika ${username} jest dostępna`);
 
             // Hashowanie hasła
             const { hash, salt } = this.hashPassword(password);
             
-            // Generuj ID użytkownika
+            // Generowanie ID użytkownika
             const userId = randomBytes(16).toString('hex');
             
             // Tworzenie nowego użytkownika
             const newUser = {
                 id: userId,
-                username: username,
+                username: username, // Zachowujemy oryginalną wielkość liter w danych
                 passwordHash: hash,
                 salt: salt,
                 role: role,
@@ -257,11 +267,24 @@ export class AuthService {
                 lastLogin: null
             };
 
+            console.log(`📦 Tworzę użytkownika: ${username} (ID: ${userId})`);
+
             // Zapis użytkownika
-            await this.kv.put(`USER_BY_ID:${userId}`, JSON.stringify(newUser));
-            await this.kv.put(`USER_BY_NAME:${username.toLowerCase()}`, JSON.stringify({ id: userId }));
+            // 1. Zapis danych użytkownika
+            const userDataKey = `USER_BY_ID:${userId}`;
+            await this.kv.put(userDataKey, JSON.stringify(newUser));
+            console.log(`   ✅ Zapisano dane użytkownika pod kluczem: ${userDataKey}`);
             
-            console.log(`✅ Zarejestrowano użytkownika: ${username} (ID: ${userId})`);
+            // 2. Zapis mapowania nazwa -> ID (zawsze małe litery)
+            await this.kv.put(existingMappingKey, JSON.stringify({
+                id: userId,
+                username: normalizedUsername
+            }));
+            console.log(`   ✅ Zapisano mapowanie pod kluczem: ${existingMappingKey}`);
+
+            // 3. Dodanie do listy użytkowników
+            await this.addToUserList(userId, username, role);
+            console.log(`   ✅ Dodano użytkownika do listy`);
 
             return {
                 success: true,
@@ -282,14 +305,40 @@ export class AuthService {
         }
     }
 
+    // Dodanie użytkownika do listy
+    async addToUserList(userId, username, role) {
+        try {
+            const usersListKey = 'USERS:LIST';
+            let usersList = await this.kv.get(usersListKey, 'json');
+            
+            if (!usersList) {
+                usersList = [];
+            }
+
+            // Sprawdź czy użytkownik już jest na liście
+            const userExists = usersList.some(u => u.id === userId);
+            if (!userExists) {
+                usersList.push({
+                    id: userId,
+                    username: username,
+                    role: role,
+                    createdAt: new Date().toISOString()
+                });
+                
+                await this.kv.put(usersListKey, JSON.stringify(usersList));
+                console.log(`   ✅ Zaktualizowano listę użytkowników (teraz ${usersList.length})`);
+            }
+        } catch (error) {
+            console.error('⚠️  Błąd dodawania do listy użytkowników:', error);
+        }
+    }
+
     // Zmiana hasła
     async changePassword(userId, currentPassword, newPassword) {
         try {
-            console.log(`🔑 Próba zmiany hasła dla użytkownika: ${userId}`);
-            
             // Pobierz użytkownika
-            const userKey = `USER_BY_ID:${userId}`;
-            const userData = await this.kv.get(userKey, 'json');
+            const userDataKey = `USER_BY_ID:${userId}`;
+            const userData = await this.kv.get(userDataKey, 'json');
             
             if (!userData) {
                 return {
@@ -298,38 +347,36 @@ export class AuthService {
                 };
             }
 
-            // Sprawdź aktualne hasło
-            const isValid = this.verifyPassword(
+            // Weryfikacja obecnego hasła
+            const isCurrentValid = this.verifyPassword(
                 currentPassword,
                 userData.passwordHash,
                 userData.salt
             );
 
-            if (!isValid) {
+            if (!isCurrentValid) {
                 return {
                     success: false,
-                    error: 'Nieprawidłowe aktualne hasło'
+                    error: 'Nieprawidłowe obecne hasło'
                 };
             }
 
-            // Hashuj nowe hasło
+            // Hashowanie nowego hasła
             const { hash, salt } = this.hashPassword(newPassword);
             
-            // Zaktualizuj użytkownika
+            // Aktualizacja danych użytkownika
             userData.passwordHash = hash;
             userData.salt = salt;
             userData.updatedAt = new Date().toISOString();
             
-            await this.kv.put(userKey, JSON.stringify(userData));
-            
-            console.log(`✅ Hasło zmienione dla użytkownika: ${userId}`);
-            
+            await this.kv.put(userDataKey, JSON.stringify(userData));
+
             return {
                 success: true,
                 message: 'Hasło zostało zmienione'
             };
         } catch (error) {
-            console.error('❌ Błąd zmiany hasła:', error);
+            console.error('Błąd zmiany hasła:', error);
             return {
                 success: false,
                 error: 'Wystąpił błąd podczas zmiany hasła'
@@ -340,11 +387,6 @@ export class AuthService {
     // Logowanie aktywności
     async logActivity(activity) {
         try {
-            if (!this.kv) {
-                console.warn('⚠️ Brak KV dla logów');
-                return;
-            }
-            
             const timestamp = new Date().toISOString();
             const logKey = `LOG:${timestamp}:${activity.userId}:${activity.action}`;
             
@@ -352,10 +394,8 @@ export class AuthService {
                 ...activity,
                 timestamp
             }));
-            
-            console.log(`📝 Zapisano log: ${activity.action} dla użytkownika ${activity.userId}`);
         } catch (error) {
-            console.error('❌ Błąd logowania aktywności:', error);
+            console.error('Błąd logowania aktywności:', error);
         }
     }
 }

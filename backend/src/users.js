@@ -7,24 +7,28 @@ export class UserService {
         this.kv = kvStorage;
     }
 
-    // Pobierz wszystkich użytkowników
+    // Pobierz wszystkich użytkowników (z listy)
     async getAllUsers() {
         try {
-            // Listowanie wszystkich kluczy użytkowników
-            // Uwaga: W Cloudflare KV nie ma natywnego listowania wszystkich kluczy
-            // Możemy użyć prefiksu lub przechowywać listę użytkowników w oddzielnym kluczu
+            console.log('📋 Pobieranie listy użytkowników...');
             
             const usersListKey = 'USERS:LIST';
             let usersList = await this.kv.get(usersListKey, 'json');
             
             if (!usersList) {
-                usersList = [];
+                console.log('ℹ️  Brak listy użytkowników - zwracam pustą tablicę');
+                return {
+                    success: true,
+                    users: []
+                };
             }
 
-            // Pobranie danych każdego użytkownika
+            console.log(`✅ Znaleziono ${usersList.length} użytkowników w liście`);
+            
+            // Pobierz dane każdego użytkownika
             const users = [];
-            for (const userId of usersList) {
-                const userKey = `USER:${userId}`;
+            for (const userListItem of usersList) {
+                const userKey = `USER_BY_ID:${userListItem.id}`;
                 const userData = await this.kv.get(userKey, 'json');
                 
                 if (userData) {
@@ -39,6 +43,20 @@ export class UserService {
                         lastLogin: userData.lastLogin,
                         loginCount: userData.loginCount
                     });
+                } else {
+                    // Jeśli nie ma danych użytkownika, użyj podstawowych z listy
+                    console.log(`⚠️  Brak pełnych danych dla użytkownika ID: ${userListItem.id}`);
+                    users.push({
+                        id: userListItem.id,
+                        username: userListItem.username,
+                        role: userListItem.role,
+                        email: '',
+                        active: true,
+                        createdAt: userListItem.createdAt,
+                        createdBy: 'unknown',
+                        lastLogin: null,
+                        loginCount: 0
+                    });
                 }
             }
 
@@ -47,7 +65,7 @@ export class UserService {
                 users: users
             };
         } catch (error) {
-            console.error('Błąd pobierania użytkowników:', error);
+            console.error('❌ Błąd pobierania użytkowników:', error);
             return {
                 success: false,
                 error: 'Wystąpił błąd podczas pobierania użytkowników'
@@ -55,19 +73,24 @@ export class UserService {
         }
     }
 
-    // Pobierz dane użytkownika
+    // Pobierz dane użytkownika po ID
     async getUser(userId) {
         try {
-            const userKey = `USER:${userId}`;
+            console.log(`🔍 Pobieranie użytkownika ID: ${userId}`);
+            
+            const userKey = `USER_BY_ID:${userId}`;
             const userData = await this.kv.get(userKey, 'json');
             
             if (!userData) {
+                console.log(`❌ Nie znaleziono użytkownika ID: ${userId}`);
                 return {
                     success: false,
                     error: 'Użytkownik nie znaleziony'
                 };
             }
 
+            console.log(`✅ Znaleziono użytkownika: ${userData.username}`);
+            
             return {
                 success: true,
                 user: {
@@ -83,7 +106,37 @@ export class UserService {
                 }
             };
         } catch (error) {
-            console.error('Błąd pobierania użytkownika:', error);
+            console.error('❌ Błąd pobierania użytkownika:', error);
+            return {
+                success: false,
+                error: 'Wystąpił błąd podczas pobierania danych użytkownika'
+            };
+        }
+    }
+
+    // Pobierz użytkownika po nazwie (case-insensitive)
+    async getUserByUsername(username) {
+        try {
+            const normalizedUsername = username.toLowerCase();
+            console.log(`🔍 Szukanie użytkownika: ${username} (znormalizowane: ${normalizedUsername})`);
+            
+            const userMappingKey = `USER_BY_NAME:${normalizedUsername}`;
+            const userMapping = await this.kv.get(userMappingKey, 'json');
+            
+            if (!userMapping || !userMapping.id) {
+                console.log(`❌ Nie znaleziono mapowania dla: ${normalizedUsername}`);
+                return {
+                    success: false,
+                    error: 'Użytkownik nie znaleziony'
+                };
+            }
+
+            console.log(`✅ Znaleziono mapowanie -> ID: ${userMapping.id}`);
+            
+            // Pobierz pełne dane użytkownika
+            return await this.getUser(userMapping.id);
+        } catch (error) {
+            console.error('❌ Błąd pobierania użytkownika po nazwie:', error);
             return {
                 success: false,
                 error: 'Wystąpił błąd podczas pobierania danych użytkownika'
@@ -94,7 +147,7 @@ export class UserService {
     // Aktualizacja użytkownika
     async updateUser(userId, updates, updatedBy) {
         try {
-            const userKey = `USER:${userId}`;
+            const userKey = `USER_BY_ID:${userId}`;
             const userData = await this.kv.get(userKey, 'json');
             
             if (!userData) {
@@ -114,18 +167,35 @@ export class UserService {
 
             await this.kv.put(userKey, JSON.stringify(updatedUser));
 
-            // Logowanie akcji
-            await this.logActivity(updatedBy, 'UPDATE_USER', {
-                userId: userId,
-                updates: updates
-            });
+            // Jeśli zmieniono nazwę użytkownika, zaktualizuj mapowanie
+            if (updates.username && updates.username !== userData.username) {
+                console.log(`🔄 Aktualizacja nazwy użytkownika: ${userData.username} -> ${updates.username}`);
+                
+                // Usuń stare mapowanie
+                const oldNormalizedUsername = userData.username.toLowerCase();
+                const oldMappingKey = `USER_BY_NAME:${oldNormalizedUsername}`;
+                await this.kv.delete(oldMappingKey);
+                console.log(`   ✅ Usunięto stare mapowanie: ${oldMappingKey}`);
+                
+                // Dodaj nowe mapowanie
+                const newNormalizedUsername = updates.username.toLowerCase();
+                const newMappingKey = `USER_BY_NAME:${newNormalizedUsername}`;
+                await this.kv.put(newMappingKey, JSON.stringify({
+                    id: userId,
+                    username: newNormalizedUsername
+                }));
+                console.log(`   ✅ Dodano nowe mapowanie: ${newMappingKey}`);
+                
+                // Zaktualizuj listę użytkowników
+                await this.updateUserInList(userId, { username: updates.username });
+            }
 
             return {
                 success: true,
                 user: updatedUser
             };
         } catch (error) {
-            console.error('Błąd aktualizacji użytkownika:', error);
+            console.error('❌ Błąd aktualizacji użytkownika:', error);
             return {
                 success: false,
                 error: 'Wystąpił błąd podczas aktualizacji użytkownika'
@@ -136,7 +206,7 @@ export class UserService {
     // Usuń użytkownika
     async deleteUser(userId, deletedBy) {
         try {
-            const userKey = `USER:${userId}`;
+            const userKey = `USER_BY_ID:${userId}`;
             const userData = await this.kv.get(userKey, 'json');
             
             if (!userData) {
@@ -154,24 +224,28 @@ export class UserService {
                 };
             }
 
-            // Usunięcie użytkownika
+            console.log(`🗑️  Usuwanie użytkownika: ${userData.username} (ID: ${userId})`);
+            
+            // 1. Usuń mapowanie nazwa -> ID
+            const normalizedUsername = userData.username.toLowerCase();
+            const userMappingKey = `USER_BY_NAME:${normalizedUsername}`;
+            await this.kv.delete(userMappingKey);
+            console.log(`   ✅ Usunięto mapowanie: ${userMappingKey}`);
+            
+            // 2. Usuń dane użytkownika
             await this.kv.delete(userKey);
-
-            // Aktualizacja listy użytkowników
+            console.log(`   ✅ Usunięto dane użytkownika: ${userKey}`);
+            
+            // 3. Usuń z listy użytkowników
             await this.removeFromUserList(userId);
-
-            // Logowanie akcji
-            await this.logActivity(deletedBy, 'DELETE_USER', {
-                userId: userId,
-                username: userData.username
-            });
+            console.log(`   ✅ Usunięto z listy użytkowników`);
 
             return {
                 success: true,
                 message: `Użytkownik ${userData.username} został usunięty`
             };
         } catch (error) {
-            console.error('Błąd usuwania użytkownika:', error);
+            console.error('❌ Błąd usuwania użytkownika:', error);
             return {
                 success: false,
                 error: 'Wystąpił błąd podczas usuwania użytkownika'
@@ -179,22 +253,28 @@ export class UserService {
         }
     }
 
-    // Dodaj użytkownika do listy
-    async addToUserList(userId) {
+    // Aktualizuj użytkownika w liście
+    async updateUserInList(userId, updates) {
         try {
             const usersListKey = 'USERS:LIST';
             let usersList = await this.kv.get(usersListKey, 'json');
             
             if (!usersList) {
-                usersList = [];
+                return;
             }
-
-            if (!usersList.includes(userId)) {
-                usersList.push(userId);
+            
+            const userIndex = usersList.findIndex(u => u.id === userId);
+            if (userIndex !== -1) {
+                usersList[userIndex] = {
+                    ...usersList[userIndex],
+                    ...updates
+                };
+                
                 await this.kv.put(usersListKey, JSON.stringify(usersList));
+                console.log(`✅ Zaktualizowano użytkownika w liście`);
             }
         } catch (error) {
-            console.error('Błąd dodawania do listy użytkowników:', error);
+            console.error('⚠️  Błąd aktualizacji listy użytkowników:', error);
         }
     }
 
@@ -204,22 +284,26 @@ export class UserService {
             const usersListKey = 'USERS:LIST';
             let usersList = await this.kv.get(usersListKey, 'json');
             
-            if (usersList) {
-                usersList = usersList.filter(id => id !== userId);
+            if (!usersList) {
+                return;
+            }
+            
+            const initialLength = usersList.length;
+            usersList = usersList.filter(u => u.id !== userId);
+            
+            if (usersList.length < initialLength) {
                 await this.kv.put(usersListKey, JSON.stringify(usersList));
+                console.log(`✅ Usunięto użytkownika z listy (teraz ${usersList.length})`);
             }
         } catch (error) {
-            console.error('Błąd usuwania z listy użytkowników:', error);
+            console.error('⚠️  Błąd usuwania z listy użytkowników:', error);
         }
     }
 
     // Pobierz statystyki użytkownika
     async getUserStats(userId) {
         try {
-            const searchLogsKey = `SEARCH:${userId}:*`;
-            // Tutaj implementacja zliczania wyszukiwań
-            // Wymagałoby to listowania kluczy z prefiksem
-            
+            // W przyszłości można dodać zliczanie wyszukiwań itp.
             return {
                 success: true,
                 stats: {
@@ -251,23 +335,6 @@ export class UserService {
             }));
         } catch (error) {
             console.error('Błąd logowania aktywności:', error);
-        }
-    }
-
-    // Pobierz historię aktywności użytkownika
-    async getUserActivity(userId, limit = 50) {
-        try {
-            // Implementacja pobierania logów aktywności
-            return {
-                success: true,
-                activities: []
-            };
-        } catch (error) {
-            console.error('Błąd pobierania aktywności:', error);
-            return {
-                success: false,
-                error: 'Wystąpił błąd podczas pobierania historii'
-            };
         }
     }
 }
