@@ -1,23 +1,24 @@
 {
   "name": "hs-code-ver",
-  "version": "1.4.3",
+  "version": "2.0.0",
   "type": "module",
-  "description": "System weryfikacji kodów celnych HS z bazą ISZTAR i systemami ostrzeżeń",
+  "description": "System weryfikacji kodów celnych HS z bazą ISZTAR i systemami ostrzeżeń z uwierzytelnianiem",
   "keywords": [
     "hs-codes",
     "customs",
     "verification",
     "q4rail",
     "sanepid",
-    "sanctions"
+    "sanctions",
+    "authentication"
   ],
   "author": "Q4Rail Sp. z o.o.",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/marius-sys/hs-code-ver"
+    "url": "hs-code.q4rail.com"
   },
-  "homepage": "https://marius-sys.github.io/hs-code-ver",
+  "homepage": "hs-code.q4rail.com",
   "scripts": {
     "test-sync": "node scripts/test-sync.js",
     "test-isztar": "node scripts/test-isztar.js",
@@ -36,13 +37,21 @@
     "verify": "echo 'Użyj: npm run verify -- --code=0101'",
     "test": "npm run test-sync && npm run test-isztar",
     "setup-kv": "node scripts/setup-kv.js",
-    "full-deploy": "npm run delta-sync && npm run deploy"
+    "full-deploy": "npm run delta-sync && npm run deploy",
+    "init-admin": "node scripts/init-admin.js",
+    "user-list": "node scripts/user-manager.js list",
+    "user-create": "node scripts/user-manager.js create",
+    "user-delete": "node scripts/user-manager.js delete",
+    "user-help": "node scripts/user-manager.js help",
+    "test-login": "curl -X POST https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev/api/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"test\",\"password\":\"test\"}'",
+    "test-auth": "echo 'Użyj: curl -H \"Authorization: Bearer TOKEN\" https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev/verify -X POST -H \"Content-Type: application/json\" -d \\'{\\\"code\\\":\\\"0101\\\"}\\''"
   },
   "bin": {
     "hs-verify": "./scripts/cli-verifier.js"
   },
   "dependencies": {
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "readline-sync": "^1.4.10"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
