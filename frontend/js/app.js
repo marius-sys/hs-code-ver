@@ -235,6 +235,17 @@ class HSCodeVerifier {
         // Dodaj nierozłączną spację przed statusem
         statusEl.innerHTML = `&nbsp;${statusText}`;
         
+        // Ustawienie kolorów inline dla lepszego kopiowania do e-maili
+        if (statusEl.className === 'sanctioned' || statusEl.className === 'invalid') {
+            statusEl.style.color = '#dc3545'; // czerwony
+        } else if (statusEl.className === 'controlled-status') {
+            statusEl.style.color = '#2196f3'; // niebieski
+        } else if (statusEl.className === 'general') {
+            statusEl.style.color = '#152a5e'; // granatowy (kolor podstawowy)
+        } else if (statusEl.className === 'valid') {
+            statusEl.style.color = '#28a745'; // zielony
+        }
+        
         if ((data.isSingleSubcode || data.isExtendedFromPrefix) && data.originalCode) {
             this.extendedCodeSpan.innerHTML = `&nbsp;${data.originalCode} → ${data.code}`;
             this.extendedCodeInfo.classList.remove('hidden');
