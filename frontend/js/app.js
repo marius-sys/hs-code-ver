@@ -51,6 +51,7 @@ class HSCodeVerifier {
                 this.verify();
             });
         });
+        document.getElementById('copyEmailBtn').addEventListener('click', () => this.copyResultForEmail());
     }
 
     // Nowa metoda do kopiowania wyniku do schowka (dla e-maila)
