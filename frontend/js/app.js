@@ -53,6 +53,97 @@ class HSCodeVerifier {
         });
     }
 
+    // Nowa metoda do kopiowania wyniku do schowka (dla e-maila)
+    copyResultForEmail() {
+        // Pobierz aktualnie wyświetlane dane
+        const code = document.getElementById('result-code').innerText.trim();
+        const description = document.getElementById('result-desc').innerHTML; // może zawierać <br>
+        const status = document.getElementById('result-status').innerText.trim();
+        
+        // Sprawdź, czy wyświetlono ostrzeżenia
+        const sanctionVisible = !this.sanctionWarningTop.classList.contains('hidden');
+        const controlledVisible = !this.controlledWarningTop.classList.contains('hidden');
+        
+        // Pobierz treść ostrzeżeń (jeśli widoczne)
+        let sanctionHtml = '';
+        if (sanctionVisible) {
+            const sanctionMsg = document.getElementById('sanction-message')?.innerText || 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!';
+            sanctionHtml = `
+                <div style="color: #dc3545; font-family: Calibri, sans-serif; font-size: 11pt; margin-bottom: 8px;">
+                    <strong>⚠️ ${sanctionMsg}</strong><br>
+                    <span style="font-weight: normal;">Ten kod HS podlega specjalnym regulacjom i ograniczeniom w handlu międzynarodowym.</span>
+                </div>
+            `;
+        }
+        
+        let controlledHtml = '';
+        if (controlledVisible) {
+            const controlledMsg = document.getElementById('controlled-message')?.innerText || 'UWAGA: Towar podlega kontroli SANEPID!';
+            controlledHtml = `
+                <div style="color: #2196f3; font-family: Calibri, sans-serif; font-size: 11pt; margin-bottom: 8px;">
+                    <strong>📋 ${controlledMsg}</strong><br>
+                    <span style="font-weight: normal;">Wymagane dokumenty sanitarne: świadectwo weterynaryjne, certyfikat fitosanitarny.</span>
+                </div>
+            `;
+        }
+        
+        // Jeśli oba ostrzeżenia, pokaż tylko sankcyjne (zgodnie z logiką)
+        if (sanctionVisible && controlledVisible) {
+            controlledHtml = '';
+        }
+        
+        // Rozszerzony kod (jeśli występuje)
+        let extendedHtml = '';
+        if (!this.extendedCodeInfo.classList.contains('hidden')) {
+            const extendedText = this.extendedCodeSpan.innerText;
+            extendedHtml = `<div style="font-family: Calibri, sans-serif; font-size: 11pt; margin-top: 8px;"><strong>Pełny kod 10-cyfrowy:</strong> ${extendedText}</div>`;
+        }
+        
+        // Przygotuj pełny HTML do skopiowania
+        const emailHtml = `
+            <div style="font-family: Calibri, sans-serif; font-size: 11pt;">
+                ${sanctionHtml}
+                ${controlledHtml}
+                <div><strong>Kod HS:</strong> ${code}</div>
+                <div><strong>Opis towaru:</strong> ${description}</div>
+                <div><strong>Status weryfikacji:</strong> <span style="color: ${this.getStatusColor(status)};">${status}</span></div>
+                ${extendedHtml}
+            </div>
+        `;
+        
+        // Skopiuj do schowka jako HTML (działa w większości nowoczesnych przeglądarek)
+        navigator.clipboard.write([
+            new ClipboardItem({
+                'text/html': new Blob([emailHtml], { type: 'text/html' }),
+                'text/plain': new Blob([this.stripHtml(emailHtml)], { type: 'text/plain' })
+            })
+        ]).then(() => {
+            alert('Skopiowano do schowka w formacie odpowiednim dla e-maila (Calibri 11pt).');
+        }).catch(err => {
+            console.error('Błąd kopiowania:', err);
+            alert('Nie udało się skopiować automatycznie. Możesz zaznaczyć tekst ręcznie.');
+        });
+    }
+    
+    // Pomocnicza funkcja do określenia koloru statusu
+    getStatusColor(status) {
+        if (status === 'SANKCJE' || status === 'NIEPOPRAWNY') return '#dc3545';
+        if (status === 'SANEPID') return '#2196f3';
+        if (status === 'KOD OGÓLNY') return '#152a5e';
+        if (status === 'POPRAWNY') return '#28a745';
+        return '#000000';
+    }
+    
+    // Usuwa tagi HTML, zostawia czysty tekst (dla wersji plain text)
+    stripHtml(html) {
+        const div = document.createElement('div');
+        div.innerHTML = html;
+        return div.textContent || div.innerText || '';
+    }
+
+    // ... reszta metod (formatInput, formatDescription, checkAPI, fetchAdditionalStats, verify, displayResult, showLoading)
+    // pozostaje bez zmian – patrz poprzednia wersja, ale uzupełniam poniżej dla kompletności
+
     formatInput(input) {
         let value = input.value.replace(/[^\d\s\-]/g, '');
         value = value.replace(/\s+/g, ' ').trim();
@@ -63,43 +154,29 @@ class HSCodeVerifier {
             if (value.length > 4) parts.push(value.substring(4, 6));
             if (value.length > 6) parts.push(value.substring(6, 8));
             if (value.length > 8) parts.push(value.substring(8, 10));
-            
             value = parts.join(' ').trim();
         }
-        
         input.value = value;
     }
 
     formatDescription(description) {
         if (!description) return '';
-        
         const parts = description.split(' → ');
         const lastIndex = parts.length - 1;
-        
-        // Sprawdź czy ostatnia część to "Pozostałe"
         const isLastRemaining = parts[lastIndex].includes('Pozostałe');
-        
-        // Formatuj każdą część
         const formattedParts = parts.map((part, index) => {
             let formattedPart = part;
-            
-            // Pogrubienie odpowiednich części
             if (isLastRemaining) {
-                // Jeśli ostatni to "Pozostałe", pogrubiamy ostatnie dwie części
                 if (index >= lastIndex - 1) {
                     formattedPart = `<strong>${part}</strong>`;
                 }
             } else {
-                // W przeciwnym razie tylko ostatnią część
                 if (index === lastIndex) {
                     formattedPart = `<strong>${part}</strong>`;
                 }
             }
-            
             return formattedPart;
         });
-        
-        // Połącz z <br> zamiast →
         return formattedParts.join('<br>');
     }
 
@@ -107,18 +184,14 @@ class HSCodeVerifier {
         try {
             const response = await fetch(`${this.apiBaseUrl}/health`);
             const data = await response.json();
-            
             if (response.ok) {
                 this.apiStatus.textContent = 'Działa ✓';
                 this.apiStatus.style.color = '#28a745';
-                
                 if (data.database) {
                     this.dbFormat.textContent = data.database.hasBinding ? 'KV' : 'Brak';
                     this.dbCount.textContent = data.database.totalRecords || '0';
                     this.lastUpdate.textContent = data.database.lastSync || 'Nieznana';
                 }
-                
-                // Pobierz też dane o sankcjach i kontroli SANEPID
                 this.fetchAdditionalStats();
             } else {
                 this.apiStatus.textContent = 'Błąd ✗';
@@ -136,11 +209,8 @@ class HSCodeVerifier {
                 fetch(`${this.apiBaseUrl}/sanctions`),
                 fetch(`${this.apiBaseUrl}/controlled`)
             ]);
-            
             const sanctionsData = await sanctionsRes.json();
             const controlledData = await controlledRes.json();
-            
-            // Możesz dodać te informacje gdzieś w UI jeśli chcesz
             if (sanctionsData.success) {
                 console.log(`Aktualne sankcje: ${sanctionsData.totalCodes} kodów`);
             }
@@ -154,33 +224,24 @@ class HSCodeVerifier {
 
     async verify() {
         let code = this.hsCodeInput.value.trim();
-        
         const cleanedCode = code.replace(/[^\d]/g, '');
-        
         if (!cleanedCode || cleanedCode.length < 4) {
             alert('Wprowadź poprawny kod HS (min. 4 cyfry)');
             return;
         }
-        
         if (cleanedCode.length > 10) {
             alert('Kod HS może mieć maksymalnie 10 cyfr');
             return;
         }
-        
         this.showLoading(true);
-        
         try {
             const response = await fetch(`${this.apiBaseUrl}/verify`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ code: code })
             });
-            
             const data = await response.json();
             this.displayResult(data);
-            
         } catch (error) {
             alert('Błąd połączenia z serwerem');
             console.error('Błąd weryfikacji:', error);
@@ -191,12 +252,9 @@ class HSCodeVerifier {
 
     displayResult(data) {
         console.log('Dane z API:', data);
-        
-        // Ustaw kod HS - dodajemy nierozłączną spację przed wartością
         const codeElement = document.getElementById('result-code');
         codeElement.innerHTML = `&nbsp;${data.code}`;
         
-        // Wyświetl sformatowany opis lub zwykły
         const descElement = document.getElementById('result-desc');
         if (data.formattedDescription) {
             descElement.innerHTML = `&nbsp;${data.formattedDescription}`;
@@ -208,8 +266,6 @@ class HSCodeVerifier {
         
         const statusEl = document.getElementById('result-status');
         let statusText = '';
-        
-        // Ustaw status weryfikacji
         if (data.specialStatus) {
             if (data.specialStatus === 'SANKCJE') {
                 statusText = 'SANKCJE';
@@ -228,18 +284,17 @@ class HSCodeVerifier {
             statusText = 'NIEPOPRAWNY';
             statusEl.className = 'invalid';
         }
-        
         statusEl.innerHTML = `&nbsp;${statusText}`;
         
-        // Ustawienie kolorów inline dla lepszego kopiowania do e-maili
+        // Kolory inline dla statusu
         if (statusEl.className === 'sanctioned' || statusEl.className === 'invalid') {
-            statusEl.style.color = '#dc3545'; // czerwony
+            statusEl.style.color = '#dc3545';
         } else if (statusEl.className === 'controlled-status') {
-            statusEl.style.color = '#2196f3'; // niebieski
+            statusEl.style.color = '#2196f3';
         } else if (statusEl.className === 'general') {
-            statusEl.style.color = '#152a5e'; // granatowy
+            statusEl.style.color = '#152a5e';
         } else if (statusEl.className === 'valid') {
-            statusEl.style.color = '#28a745'; // zielony
+            statusEl.style.color = '#28a745';
         }
         
         if ((data.isSingleSubcode || data.isExtendedFromPrefix) && data.originalCode) {
@@ -249,7 +304,7 @@ class HSCodeVerifier {
             this.extendedCodeInfo.classList.add('hidden');
         }
         
-        // Obsługa ostrzeżeń sankcyjnych
+        // Obsługa ostrzeżeń
         if (data.sanctioned) {
             this.sanctionWarningTop.classList.remove('hidden');
             if (data.sanctionMessage) {
@@ -259,7 +314,6 @@ class HSCodeVerifier {
             this.sanctionWarningTop.classList.add('hidden');
         }
         
-        // Obsługa ostrzeżeń kontroli SANEPID
         if (data.controlled) {
             this.controlledWarningTop.classList.remove('hidden');
             if (data.controlMessage) {
@@ -269,31 +323,10 @@ class HSCodeVerifier {
             this.controlledWarningTop.classList.add('hidden');
         }
         
-        // Jeśli oba ostrzeżenia są widoczne, ukryj SANEPID (sankcyjne ma pierwszeństwo)
         if (data.sanctioned && data.controlled) {
             this.controlledWarningTop.classList.add('hidden');
         }
-
-        // --- Ustawienia stylów dla lepszego kopiowania do e-maila ---
-        // 1. Czcionka Calibri 11pt dla całego kontenera wyników
-        this.result.style.fontFamily = "Calibri, sans-serif";
-        this.result.style.fontSize = "11pt";
-
-        // 2. Dla ostrzeżenia sankcyjnego: czerwony tekst (ikonka zachowa swój kolor z CSS)
-        if (data.sanctioned) {
-            this.sanctionWarningTop.style.fontFamily = "Calibri, sans-serif";
-            this.sanctionWarningTop.style.fontSize = "11pt";
-            this.sanctionWarningTop.style.color = "#dc3545"; // tekst czerwony
-        }
-
-        // 3. Dla ostrzeżenia SANEPID: niebieski tekst
-        if (data.controlled) {
-            this.controlledWarningTop.style.fontFamily = "Calibri, sans-serif";
-            this.controlledWarningTop.style.fontSize = "11pt";
-            this.controlledWarningTop.style.color = "#2196f3"; // tekst niebieski
-        }
-        // -----------------------------------------------------------
-
+        
         this.result.classList.remove('hidden');
     }
 
@@ -308,6 +341,7 @@ class HSCodeVerifier {
     }
 }
 
+// Inicjalizacja po załadowaniu DOM
 document.addEventListener('DOMContentLoaded', () => {
     new HSCodeVerifier();
 });
