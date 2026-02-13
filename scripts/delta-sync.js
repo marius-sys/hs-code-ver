@@ -19,13 +19,14 @@ class DeltaSync {
             unchanged: 0
         };
         this.kvId = "d4e909bdc6114613ab76635fadb855b2";
+        this.kvKey = "HS_CURRENT_DATABASE"; // klucz, pod którym przechowujemy bazę
+        this.debugMode = process.argv.includes('--debug');
     }
 
     async fetchFromIsztar() {
         console.log('📥 Pobieranie danych z API ISZTAR...');
         this.newData = {};
 
-        // NAGŁÓWKI, KTÓRE DZIAŁAJĄ (potwierdzone testem)
         const headers = {
             'Accept': 'application/json, text/plain, */*',
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -67,14 +68,12 @@ class DeltaSync {
                     console.log(`   ❌ Błąd: ${response.status}`);
                     failedPages++;
                     
-                    // Szczegółowe info dla błędu 406
                     if (response.status === 406) {
                         const errorText = await response.text();
                         console.log(`   Szczegóły: ${errorText.substring(0, 200)}...`);
                     }
                 }
                 
-                // Opóźnienie 2 sekundy między żądaniami
                 if (page < TOTAL_PAGES) {
                     console.log(`   ⏳ Oczekiwanie 2s przed następną stroną...`);
                     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -97,7 +96,6 @@ class DeltaSync {
             console.log('   2. Czy API ISZTAR jest dostępne');
             console.log('   3. Użyj: npm run test-isztar');
             
-            // Stwórz minimalną bazę testową
             console.log('\n🔄 Tworzę minimalną bazę testową...');
             this.newData = this.createTestDatabase();
             console.log(`   Utworzono ${Object.keys(this.newData).length} testowych kodów`);
@@ -108,22 +106,18 @@ class DeltaSync {
         let processedCount = 0;
         
         const processNode = (currentNode, currentPath = []) => {
-            // Kopiuj bieżącą ścieżkę
             const newPath = [...currentPath];
             
-            // Dodaj opis bieżącego węzła jeśli istnieje
             if (currentNode.description && currentNode.description.trim()) {
                 newPath.push(currentNode.description.trim());
             }
             
-            // Jeśli węzeł ma kod, dodaj go do bazy
             if (currentNode.code) {
                 const fullDescription = newPath.join(' → ');
                 this.newData[currentNode.code] = fullDescription;
                 processedCount++;
             }
             
-            // Rekurencyjnie przetwarzaj podgrupy
             if (currentNode.subgroup && Array.isArray(currentNode.subgroup)) {
                 for (const child of currentNode.subgroup) {
                     processNode(child, newPath);
@@ -131,9 +125,7 @@ class DeltaSync {
             }
         };
         
-        // Rozpocznij przetwarzanie
         processNode(node, parentPath);
-        
         return processedCount;
     }
 
@@ -152,17 +144,22 @@ class DeltaSync {
     }
 
     async loadFromKV() {
-        console.log('\n📖 Wczytywanie starej bazy z KV...');
+        console.log(`\n📖 Wczytywanie starej bazy z KV (klucz: ${this.kvKey})...`);
         try {
-            const cmd = `npx wrangler kv key get --namespace-id=${this.kvId} "HS_CURRENT_DATABASE" --remote --json 2>&1`;
+            // Dodajemy timeout 60s i przekazujemy env
+            const env = { ...process.env };
+            const cmd = `npx wrangler kv key get --namespace-id=${this.kvId} "${this.kvKey}" --remote --json 2>&1`;
+            
+            console.log(`   Wywołanie: ${cmd.replace(this.kvId, '***')}`);
             
             const stdout = execSync(cmd, { 
                 encoding: 'utf8',
                 stdio: ['pipe', 'pipe', 'pipe'],
-                timeout: 30000
+                timeout: 60000,
+                env: env
             }).trim();
             
-            console.log(`   Odpowiedź KV: ${stdout.substring(0, 100)}...`);
+            console.log(`   Odpowiedź KV (pierwsze 200 znaków): ${stdout.substring(0, 200)}...`);
             
             if (stdout && !stdout.includes('ERROR') && !stdout.includes('NotFound') && stdout !== 'null') {
                 try {
@@ -173,11 +170,14 @@ class DeltaSync {
                     this.oldData = {};
                 }
             } else {
-                console.log('   ℹ️  Brak istniejącej bazy - pierwsza synchronizacja');
+                console.log('   ℹ️  Brak istniejącej bazy lub klucz nie istnieje – pierwsza synchronizacja');
                 this.oldData = {};
             }
         } catch (error) {
             console.log(`   ⚠️  Błąd ładowania z KV: ${error.message}`);
+            if (error.stderr) {
+                console.log(`   stderr: ${error.stderr.toString()}`);
+            }
             this.oldData = {};
         }
     }
@@ -222,7 +222,7 @@ class DeltaSync {
             throw new Error('Brak danych do zapisania');
         }
         
-        // 1. Backup starej bazy
+        // 1. Backup starej bazy (jeśli istnieje)
         if (Object.keys(this.oldData).length > 0) {
             try {
                 console.log('   Tworzenie backupu starej bazy...');
@@ -245,12 +245,12 @@ class DeltaSync {
 
         // 2. Zapis nowej bazy
         try {
-            console.log('   Zapis nowej bazy...');
+            console.log(`   Zapis nowej bazy pod klucz: ${this.kvKey}...`);
             const dataStr = JSON.stringify(this.newData);
             const tmpFile = '/tmp/hs_data.json';
             writeFileSync(tmpFile, dataStr);
             
-            const saveCmd = `npx wrangler kv key put --namespace-id=${this.kvId} "HS_CURRENT_DATABASE" --path ${tmpFile} --remote`;
+            const saveCmd = `npx wrangler kv key put --namespace-id=${this.kvId} "${this.kvKey}" --path ${tmpFile} --remote`;
             const result = execSync(saveCmd, { 
                 encoding: 'utf8',
                 timeout: 60000 
@@ -272,7 +272,7 @@ class DeltaSync {
             lastSync: new Date().toISOString(),
             totalRecords: Object.keys(this.newData).length,
             changes: this.changes,
-            version: '1.4.1',
+            version: '1.4.2',
             syncType: 'delta'
         };
 
@@ -296,15 +296,29 @@ class DeltaSync {
 
     async run() {
         console.log('='.repeat(60));
-        console.log('🔄 SYSTEM SYNCHRONIZACJI DELTA HS CODES v1.4.2');
+        console.log('🔄 SYSTEM SYNCHRONIZACJI DELTA HS CODES v1.4.3');
         console.log('='.repeat(60));
         console.log(`KV Namespace ID: ${this.kvId}`);
+        console.log(`Klucz bazy: ${this.kvKey}`);
         console.log(`Node: ${process.version}`);
         console.log(`Czas: ${new Date().toISOString()}`);
+        console.log(`Debug mode: ${this.debugMode}`);
 
         const startTime = Date.now();
 
         try {
+            // Opcjonalnie: lista kluczy w namespace (jeśli debug)
+            if (this.debugMode) {
+                console.log('\n🔍 Lista kluczy w namespace:');
+                try {
+                    const listCmd = `npx wrangler kv key list --namespace-id=${this.kvId} --remote`;
+                    const list = execSync(listCmd, { encoding: 'utf8', timeout: 30000 });
+                    console.log(list);
+                } catch (e) {
+                    console.log(`   Błąd listowania: ${e.message}`);
+                }
+            }
+
             // 1. Sprawdź dostępność narzędzi
             console.log('\n1️⃣  Sprawdzanie narzędzi...');
             try {
@@ -319,7 +333,6 @@ class DeltaSync {
             
             // 3. Pobierz nowe dane
             console.log('\n2️⃣  Pobieranie danych z API ISZTAR...');
-            console.log('   Używam nagłówków potwierdzonych testem');
             await this.fetchFromIsztar();
             
             // 4. Oblicz różnice
@@ -330,8 +343,7 @@ class DeltaSync {
                 await this.saveToKV();
                 console.log('\n✅ SYNCHRONIZACJA ZAKOŃCZONA SUKCESEM!');
             } else if (Object.keys(this.newData).length > 0) {
-                console.log('\n✅ Brak zmian - baza jest aktualna');
-                // Aktualizuj tylko timestamp metadanych
+                console.log('\n✅ Brak zmian – baza jest aktualna');
                 await this.updateMetadataOnly();
             } else {
                 console.log('\n⚠️  Brak danych do zapisania');
@@ -355,7 +367,7 @@ class DeltaSync {
             lastSync: new Date().toISOString(),
             totalRecords: Object.keys(this.oldData).length,
             changes: { added: 0, updated: 0, removed: 0, unchanged: Object.keys(this.oldData).length },
-            version: '1.4.2',
+            version: '1.4.3',
             syncType: 'none'
         };
 
