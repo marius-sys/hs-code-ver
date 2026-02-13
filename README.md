@@ -25,9 +25,3 @@ System akceptuje kody w różnych formatach:
 ## 🚨 System ostrzeżeń sankcyjnych
 
 System sprawdza czy kod HS należy do grupy sankcyjnej. Jeśli kod zaczyna się od kodu 4-cyfrowego z listy sankcyjnej, wyświetlane jest ostrzeżenie.
-
-### Zarządzanie sankcjami:
-
-1. **Wyświetl aktualną listę:**
-   ```bash
-   npm run sanction-list
