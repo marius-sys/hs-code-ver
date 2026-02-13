@@ -194,7 +194,6 @@ class HSCodeVerifier {
         
         // Ustaw kod HS - dodajemy nierozłączną spację przed wartością
         const codeElement = document.getElementById('result-code');
-        // Używamy nierozłącznej spacji (U+00A0) aby była zawsze widoczna
         codeElement.innerHTML = `&nbsp;${data.code}`;
         
         // Wyświetl sformatowany opis lub zwykły
@@ -202,7 +201,6 @@ class HSCodeVerifier {
         if (data.formattedDescription) {
             descElement.innerHTML = `&nbsp;${data.formattedDescription}`;
         } else if (data.description) {
-            // Jeśli backend nie dostarczył sformatowanego opisu, sformatuj go na froncie
             descElement.innerHTML = `&nbsp;${this.formatDescription(data.description)}`;
         } else {
             descElement.textContent = '';
@@ -213,7 +211,6 @@ class HSCodeVerifier {
         
         // Ustaw status weryfikacji
         if (data.specialStatus) {
-            // Kod sankcyjny lub pod kontrolą SANEPID
             if (data.specialStatus === 'SANKCJE') {
                 statusText = 'SANKCJE';
                 statusEl.className = 'sanctioned';
@@ -232,7 +229,6 @@ class HSCodeVerifier {
             statusEl.className = 'invalid';
         }
         
-        // Dodaj nierozłączną spację przed statusem
         statusEl.innerHTML = `&nbsp;${statusText}`;
         
         // Ustawienie kolorów inline dla lepszego kopiowania do e-maili
@@ -241,7 +237,7 @@ class HSCodeVerifier {
         } else if (statusEl.className === 'controlled-status') {
             statusEl.style.color = '#2196f3'; // niebieski
         } else if (statusEl.className === 'general') {
-            statusEl.style.color = '#152a5e'; // granatowy (kolor podstawowy)
+            statusEl.style.color = '#152a5e'; // granatowy
         } else if (statusEl.className === 'valid') {
             statusEl.style.color = '#28a745'; // zielony
         }
@@ -255,7 +251,6 @@ class HSCodeVerifier {
         
         // Obsługa ostrzeżeń sankcyjnych
         if (data.sanctioned) {
-            console.log('Wyświetlam ostrzeżenie sankcyjne dla kodu:', data.code);
             this.sanctionWarningTop.classList.remove('hidden');
             if (data.sanctionMessage) {
                 document.getElementById('sanction-message').textContent = data.sanctionMessage;
@@ -266,7 +261,6 @@ class HSCodeVerifier {
         
         // Obsługa ostrzeżeń kontroli SANEPID
         if (data.controlled) {
-            console.log('Wyświetlam ostrzeżenie kontroli SANEPID dla kodu:', data.code);
             this.controlledWarningTop.classList.remove('hidden');
             if (data.controlMessage) {
                 document.getElementById('controlled-message').textContent = data.controlMessage;
@@ -279,7 +273,27 @@ class HSCodeVerifier {
         if (data.sanctioned && data.controlled) {
             this.controlledWarningTop.classList.add('hidden');
         }
-        
+
+        // --- Ustawienia stylów dla lepszego kopiowania do e-maila ---
+        // 1. Czcionka Calibri 11pt dla całego kontenera wyników
+        this.result.style.fontFamily = "Calibri, sans-serif";
+        this.result.style.fontSize = "11pt";
+
+        // 2. Dla ostrzeżenia sankcyjnego: czerwony tekst (ikonka zachowa swój kolor z CSS)
+        if (data.sanctioned) {
+            this.sanctionWarningTop.style.fontFamily = "Calibri, sans-serif";
+            this.sanctionWarningTop.style.fontSize = "11pt";
+            this.sanctionWarningTop.style.color = "#dc3545"; // tekst czerwony
+        }
+
+        // 3. Dla ostrzeżenia SANEPID: niebieski tekst
+        if (data.controlled) {
+            this.controlledWarningTop.style.fontFamily = "Calibri, sans-serif";
+            this.controlledWarningTop.style.fontSize = "11pt";
+            this.controlledWarningTop.style.color = "#2196f3"; // tekst niebieski
+        }
+        // -----------------------------------------------------------
+
         this.result.classList.remove('hidden');
     }
 
