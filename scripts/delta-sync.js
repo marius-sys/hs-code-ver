@@ -19,11 +19,37 @@ class DeltaSync {
             unchanged: 0
         };
         this.kvId = "d4e909bdc6114613ab76635fadb855b2";
-        this.kvKey = "HS_CURRENT_DATABASE"; // klucz, pod którym przechowujemy bazę
+        this.kvKey = "HS_CURRENT_DATABASE";
         this.debugMode = process.argv.includes('--debug');
+        // 🔧 Pobierz account ID z env (wymagane!)
+        this.accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+        if (!this.accountId) {
+            console.error('❌ Brak CLOUDFLARE_ACCOUNT_ID w środowisku!');
+            process.exit(1);
+        }
+    }
+
+    // 🔧 Metoda pomocnicza do wywoływania wrangler z account-id
+    runWrangler(cmd, options = {}) {
+        const fullCmd = `npx wrangler ${cmd} --account-id ${this.accountId}`;
+        try {
+            const stdout = execSync(fullCmd, {
+                encoding: 'utf8',
+                stdio: ['pipe', 'pipe', 'pipe'],
+                timeout: options.timeout || 60000,
+                env: { ...process.env }
+            });
+            return { stdout, stderr: '' };
+        } catch (error) {
+            // execSync rzuca wyjątkiem przy niezerowym kodzie wyjścia
+            const stderr = error.stderr?.toString() || '';
+            const stdout = error.stdout?.toString() || '';
+            throw new Error(`Wrangler error (${error.status}): ${stderr || stdout || error.message}`);
+        }
     }
 
     async fetchFromIsztar() {
+        // ... bez zmian (ta część działa)
         console.log('📥 Pobieranie danych z API ISZTAR...');
         this.newData = {};
 
@@ -146,22 +172,11 @@ class DeltaSync {
     async loadFromKV() {
         console.log(`\n📖 Wczytywanie starej bazy z KV (klucz: ${this.kvKey})...`);
         try {
-            // Dodajemy timeout 60s i przekazujemy env
-            const env = { ...process.env };
-            const cmd = `npx wrangler kv key get --namespace-id=${this.kvId} "${this.kvKey}" --remote --json 2>&1`;
+            // 🔧 Używamy metody runWrangler z account-id
+            const cmd = `kv key get --namespace-id=${this.kvId} "${this.kvKey}" --remote --json`;
+            const { stdout } = this.runWrangler(cmd, { timeout: 60000 });
             
-            console.log(`   Wywołanie: ${cmd.replace(this.kvId, '***')}`);
-            
-            const stdout = execSync(cmd, { 
-                encoding: 'utf8',
-                stdio: ['pipe', 'pipe', 'pipe'],
-                timeout: 60000,
-                env: env
-            }).trim();
-            
-            console.log(`   Odpowiedź KV (pierwsze 200 znaków): ${stdout.substring(0, 200)}...`);
-            
-            if (stdout && !stdout.includes('ERROR') && !stdout.includes('NotFound') && stdout !== 'null') {
+            if (stdout && stdout !== 'null' && !stdout.includes('ERROR') && !stdout.includes('NotFound')) {
                 try {
                     this.oldData = JSON.parse(stdout);
                     console.log(`   ✅ Znaleziono ${Object.keys(this.oldData).length} istniejących kodów`);
@@ -174,9 +189,11 @@ class DeltaSync {
                 this.oldData = {};
             }
         } catch (error) {
-            console.log(`   ⚠️  Błąd ładowania z KV: ${error.message}`);
-            if (error.stderr) {
-                console.log(`   stderr: ${error.stderr.toString()}`);
+            console.log(`   ❌ Błąd odczytu z KV: ${error.message}`);
+            // Jeśli to błąd autoryzacji, przerywamy – nie kontynuujemy z pustą bazą!
+            if (error.message.includes('Unauthorized') || error.message.includes('Authentication')) {
+                console.error('   ⚠️  Błąd autoryzacji – sprawdź token i account ID!');
+                process.exit(1);
             }
             this.oldData = {};
         }
@@ -230,11 +247,8 @@ class DeltaSync {
                 const tmpFile = '/tmp/hs_backup.json';
                 writeFileSync(tmpFile, backupData);
                 
-                const backupCmd = `npx wrangler kv key put --namespace-id=${this.kvId} "HS_PREVIOUS_DATABASE" --path ${tmpFile} --remote`;
-                execSync(backupCmd, { 
-                    stdio: 'pipe',
-                    timeout: 30000 
-                });
+                const cmd = `kv key put --namespace-id=${this.kvId} "HS_PREVIOUS_DATABASE" --path ${tmpFile} --remote`;
+                this.runWrangler(cmd, { timeout: 30000 });
                 
                 unlinkSync(tmpFile);
                 console.log('   ✅ Backup zapisany');
@@ -250,20 +264,14 @@ class DeltaSync {
             const tmpFile = '/tmp/hs_data.json';
             writeFileSync(tmpFile, dataStr);
             
-            const saveCmd = `npx wrangler kv key put --namespace-id=${this.kvId} "${this.kvKey}" --path ${tmpFile} --remote`;
-            const result = execSync(saveCmd, { 
-                encoding: 'utf8',
-                timeout: 60000 
-            });
+            const cmd = `kv key put --namespace-id=${this.kvId} "${this.kvKey}" --path ${tmpFile} --remote`;
+            this.runWrangler(cmd, { timeout: 60000 });
             
             unlinkSync(tmpFile);
             console.log(`   ✅ Nowa baza zapisana (${Object.keys(this.newData).length} rekordów)`);
             
         } catch (error) {
             console.error(`   ❌ Błąd zapisu nowej bazy: ${error.message}`);
-            if (error.stderr) {
-                console.error(`   Szczegóły: ${error.stderr.toString().substring(0, 200)}`);
-            }
             throw error;
         }
 
@@ -272,7 +280,7 @@ class DeltaSync {
             lastSync: new Date().toISOString(),
             totalRecords: Object.keys(this.newData).length,
             changes: this.changes,
-            version: '1.4.2',
+            version: '1.4.3',
             syncType: 'delta'
         };
 
@@ -281,16 +289,38 @@ class DeltaSync {
             const metaFile = '/tmp/hs_metadata.json';
             writeFileSync(metaFile, JSON.stringify(metadata));
             
-            const metaCmd = `npx wrangler kv key put --namespace-id=${this.kvId} "HS_METADATA" --path ${metaFile} --remote`;
-            execSync(metaCmd, { 
-                stdio: 'pipe',
-                timeout: 30000 
-            });
+            const cmd = `kv key put --namespace-id=${this.kvId} "HS_METADATA" --path ${metaFile} --remote`;
+            this.runWrangler(cmd, { timeout: 30000 });
             
             unlinkSync(metaFile);
             console.log('   ✅ Metadane zapisane');
         } catch (error) {
             console.log(`   ⚠️  Błąd zapisu metadanych: ${error.message}`);
+        }
+    }
+
+    async updateMetadataOnly() {
+        console.log('📄 Aktualizacja tylko metadanych...');
+        
+        const metadata = {
+            lastSync: new Date().toISOString(),
+            totalRecords: Object.keys(this.oldData).length,
+            changes: { added: 0, updated: 0, removed: 0, unchanged: Object.keys(this.oldData).length },
+            version: '1.4.3',
+            syncType: 'none'
+        };
+
+        try {
+            const metaFile = '/tmp/hs_metadata.json';
+            writeFileSync(metaFile, JSON.stringify(metadata));
+            
+            const cmd = `kv key put --namespace-id=${this.kvId} "HS_METADATA" --path ${metaFile} --remote`;
+            this.runWrangler(cmd);
+            
+            unlinkSync(metaFile);
+            console.log('   ✅ Metadane zaktualizowane');
+        } catch (error) {
+            console.log(`   ⚠️  Błąd aktualizacji metadanych: ${error.message}`);
         }
     }
 
@@ -307,25 +337,16 @@ class DeltaSync {
         const startTime = Date.now();
 
         try {
-            // Opcjonalnie: lista kluczy w namespace (jeśli debug)
-            if (this.debugMode) {
-                console.log('\n🔍 Lista kluczy w namespace:');
-                try {
-                    const listCmd = `npx wrangler kv key list --namespace-id=${this.kvId} --remote`;
-                    const list = execSync(listCmd, { encoding: 'utf8', timeout: 30000 });
-                    console.log(list);
-                } catch (e) {
-                    console.log(`   Błąd listowania: ${e.message}`);
-                }
-            }
-
-            // 1. Sprawdź dostępność narzędzi
-            console.log('\n1️⃣  Sprawdzanie narzędzi...');
+            // 🔧 Sprawdź połączenie z KV (testowy odczyt)
+            console.log('\n1️⃣  Test połączenia z Cloudflare KV...');
             try {
-                const wranglerVersion = execSync('npx wrangler --version 2>&1', { encoding: 'utf8' });
-                console.log(`   ✅ Wrangler: ${wranglerVersion.trim()}`);
+                const testCmd = `kv key list --namespace-id=${this.kvId} --remote --limit=1`;
+                this.runWrangler(testCmd, { timeout: 10000 });
+                console.log('   ✅ Połączenie z KV działa');
             } catch (error) {
-                console.log(`   ⚠️  Błąd Wrangler: ${error.message}`);
+                console.error('   ❌ Błąd połączenia z KV:', error.message);
+                console.error('   Sprawdź: CLOUDFLARE_API_TOKEN i uprawnienia (KV:Edit)');
+                process.exit(1);
             }
 
             // 2. Załaduj starą bazę
@@ -357,31 +378,6 @@ class DeltaSync {
             console.error('\n💥 BŁĄD SYNCHRONIZACJI:', error.message);
             console.error('Stack:', error.stack);
             process.exit(1);
-        }
-    }
-
-    async updateMetadataOnly() {
-        console.log('📄 Aktualizacja tylko metadanych...');
-        
-        const metadata = {
-            lastSync: new Date().toISOString(),
-            totalRecords: Object.keys(this.oldData).length,
-            changes: { added: 0, updated: 0, removed: 0, unchanged: Object.keys(this.oldData).length },
-            version: '1.4.3',
-            syncType: 'none'
-        };
-
-        try {
-            const metaFile = '/tmp/hs_metadata.json';
-            writeFileSync(metaFile, JSON.stringify(metadata));
-            
-            const metaCmd = `npx wrangler kv key put --namespace-id=${this.kvId} "HS_METADATA" --path ${metaFile} --remote`;
-            execSync(metaCmd, { stdio: 'pipe' });
-            
-            unlinkSync(metaFile);
-            console.log('   ✅ Metadane zaktualizowane');
-        } catch (error) {
-            console.log(`   ⚠️  Błąd aktualizacji metadanych: ${error.message}`);
         }
     }
 }
