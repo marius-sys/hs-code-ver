@@ -30,19 +30,17 @@ class DeltaSync {
         }
     }
 
-    // 🔧 Asynchroniczna metoda z dużym buforem
     async runWrangler(cmd, options = {}) {
         const fullCmd = `npx wrangler ${cmd}`;
         try {
             const { stdout, stderr } = await execAsync(fullCmd, {
                 encoding: 'utf8',
                 timeout: options.timeout || 60000,
-                maxBuffer: 20 * 1024 * 1024, // 20MB - dla dużych baz
+                maxBuffer: 20 * 1024 * 1024,
                 env: { ...process.env }
             });
             return { stdout, stderr, exitCode: 0 };
         } catch (error) {
-            // Wrangler często zwraca dane na stdout mimo błędu (np. ostrzeżenia na stderr)
             return {
                 stdout: error.stdout || '',
                 stderr: error.stderr || '',
@@ -114,7 +112,11 @@ class DeltaSync {
         
         console.log(`\n📊 PODSUMOWANIE POBRANIA:`);
         console.log(`   ✅ Udane strony: ${successfulPages}/${TOTAL_PAGES}`);
-        console.log(`   ❌ Nieudane strony: ${failedPages}`);
+        if (failedPages > 0) {
+            console.log(`   ❌ Nieudane strony: ${failedPages}`);
+        } else {
+            console.log(`   ✅ Nieudane strony: 0`);
+        }
         console.log(`   📦 Łącznie kodów HS: ${Object.keys(this.newData).length}`);
         
         if (successfulPages === 0) {
@@ -173,7 +175,6 @@ class DeltaSync {
 
     async loadFromKV() {
         console.log(`\n📖 Wczytywanie starej bazy z KV (klucz: ${this.kvKey})...`);
-        // Zwiększony timeout do 120s dla dużych baz
         const cmd = `kv key get --namespace-id=${this.kvId} "${this.kvKey}" --remote`;
         const result = await this.runWrangler(cmd, { timeout: 120000 });
         
@@ -191,7 +192,6 @@ class DeltaSync {
                 console.log(`   ⚠️  Błąd parsowania JSON: ${parseError.message}`);
                 console.log(`   Otrzymany stdout (pierwsze 500 znaków): ${stdout.substring(0, 500)}...`);
                 console.log(`   Długość stdout: ${stdout.length} bajtów`);
-                // Jeśli parsowanie się nie udało, zakładamy brak bazy (ale logujemy problem)
                 this.oldData = {};
             }
         } else {
@@ -240,7 +240,6 @@ class DeltaSync {
             throw new Error('Brak danych do zapisania');
         }
         
-        // Backup starej bazy (jeśli istnieje)
         if (Object.keys(this.oldData).length > 0) {
             try {
                 console.log('   Tworzenie backupu starej bazy...');
@@ -259,7 +258,6 @@ class DeltaSync {
             }
         }
 
-        // Zapis nowej bazy
         try {
             console.log(`   Zapis nowej bazy pod klucz: ${this.kvKey}...`);
             const dataStr = JSON.stringify(this.newData);
@@ -278,7 +276,6 @@ class DeltaSync {
             throw error;
         }
 
-        // Zapis metadanych
         const metadata = {
             lastSync: new Date().toISOString(),
             totalRecords: Object.keys(this.newData).length,
@@ -342,7 +339,6 @@ class DeltaSync {
         const startTime = Date.now();
 
         try {
-            // Test połączenia z Cloudflare API
             console.log('\n1️⃣  Test połączenia z Cloudflare KV...');
             const testCmd = `kv namespace list`;
             const testResult = await this.runWrangler(testCmd, { timeout: 10000 });
