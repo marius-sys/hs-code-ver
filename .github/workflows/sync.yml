@@ -1,4 +1,4 @@
-name: 🔄 Daily HS Database Sync v1.4.1
+name: 🔄 Daily HS Database Sync v1.4.3
 
 on:
   schedule:
@@ -79,23 +79,14 @@ jobs:
           echo "🔧 Konfiguracja Wrangler..."
           # Sprawdź konfigurację
           npx wrangler whoami
-            - name: 🛠️ Diagnostyka KV przed synchronizacją
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          echo "Sprawdzanie listy kluczy w KV..."
-          npx wrangler kv key list --namespace-id=${{ env.KV_ID }} --remote --limit=5 || echo "Błąd listowania - sprawdź uprawnienia"
-          echo "Odczyt metadanych..."
-          npx wrangler kv key get --namespace-id=${{ env.KV_ID }} "HS_METADATA" --remote || echo "Brak metadanych"
-          
+      
       - name: 🗃️ Run delta sync
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           echo "🔄 Uruchamiam synchronizację delta..."
-          echo "Wersja: 1.4.1"
+          echo "Wersja: 1.4.3"
           echo "KV ID: ${{ env.KV_ID }}"
           echo ""
           
@@ -139,13 +130,13 @@ jobs:
           sleep 10
           
           # Sprawdź health endpoint
-          curl -s "${{ env.WORKER_URL }}/health" | jq . 2>/dev/null || \
-          curl -s "${{ env.WORKER_URL }}/health"
+          curl -s "https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev/health" | jq . 2>/dev/null || \
+          curl -s "https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev/health"
           
           echo ""
           echo "📊 Statystyki:"
-          curl -s "${{ env.WORKER_URL }}/stats" | jq . 2>/dev/null || \
-          curl -s "${{ env.WORKER_URL }}/stats"
+          curl -s "https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev/stats" | jq . 2>/dev/null || \
+          curl -s "https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev/stats"
 
   manual-fallback:
     runs-on: ubuntu-latest
@@ -178,7 +169,7 @@ jobs:
           echo "$TEST_DATA" | npx wrangler kv key put --namespace-id=${{ env.KV_ID }} "HS_CURRENT_DATABASE" --remote
           
           # Utwórz metadane
-          META='{"lastSync":"'$(date -Iseconds)'","totalRecords":3,"changes":{"added":3,"updated":0,"removed":0,"unchanged":0},"version":"1.4.1","syncType":"manual_fallback"}'
+          META='{"lastSync":"'$(date -Iseconds)'","totalRecords":3,"changes":{"added":3,"updated":0,"removed":0,"unchanged":0},"version":"1.4.3","syncType":"manual_fallback"}'
           
           echo "$META" | npx wrangler kv key put --namespace-id=${{ env.KV_ID }} "HS_METADATA" --remote
           
