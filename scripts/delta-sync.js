@@ -21,7 +21,6 @@ class DeltaSync {
         this.kvId = "d4e909bdc6114613ab76635fadb855b2";
         this.kvKey = "HS_CURRENT_DATABASE";
         this.debugMode = process.argv.includes('--debug');
-        // 🔧 Pobierz account ID z env (wymagane!)
         this.accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
         if (!this.accountId) {
             console.error('❌ Brak CLOUDFLARE_ACCOUNT_ID w środowisku!');
@@ -29,9 +28,9 @@ class DeltaSync {
         }
     }
 
-    // 🔧 Metoda pomocnicza do wywoływania wrangler z account-id
+    // 🔧 Poprawiona składnia – account-id przed komendą
     runWrangler(cmd, options = {}) {
-        const fullCmd = `npx wrangler ${cmd} --account-id ${this.accountId}`;
+        const fullCmd = `npx wrangler --account-id ${this.accountId} ${cmd}`;
         try {
             const stdout = execSync(fullCmd, {
                 encoding: 'utf8',
@@ -41,7 +40,6 @@ class DeltaSync {
             });
             return { stdout, stderr: '' };
         } catch (error) {
-            // execSync rzuca wyjątkiem przy niezerowym kodzie wyjścia
             const stderr = error.stderr?.toString() || '';
             const stdout = error.stdout?.toString() || '';
             throw new Error(`Wrangler error (${error.status}): ${stderr || stdout || error.message}`);
@@ -49,7 +47,6 @@ class DeltaSync {
     }
 
     async fetchFromIsztar() {
-        // ... bez zmian (ta część działa)
         console.log('📥 Pobieranie danych z API ISZTAR...');
         this.newData = {};
 
@@ -172,7 +169,6 @@ class DeltaSync {
     async loadFromKV() {
         console.log(`\n📖 Wczytywanie starej bazy z KV (klucz: ${this.kvKey})...`);
         try {
-            // 🔧 Używamy metody runWrangler z account-id
             const cmd = `kv key get --namespace-id=${this.kvId} "${this.kvKey}" --remote --json`;
             const { stdout } = this.runWrangler(cmd, { timeout: 60000 });
             
@@ -190,7 +186,6 @@ class DeltaSync {
             }
         } catch (error) {
             console.log(`   ❌ Błąd odczytu z KV: ${error.message}`);
-            // Jeśli to błąd autoryzacji, przerywamy – nie kontynuujemy z pustą bazą!
             if (error.message.includes('Unauthorized') || error.message.includes('Authentication')) {
                 console.error('   ⚠️  Błąd autoryzacji – sprawdź token i account ID!');
                 process.exit(1);
@@ -337,10 +332,10 @@ class DeltaSync {
         const startTime = Date.now();
 
         try {
-            // 🔧 Sprawdź połączenie z KV (testowy odczyt)
+            // 🔧 Test połączenia z KV z poprawną składnią (bez znaku =)
             console.log('\n1️⃣  Test połączenia z Cloudflare KV...');
             try {
-                const testCmd = `kv key list --namespace-id=${this.kvId} --remote --limit=1`;
+                const testCmd = `kv key list --namespace-id=${this.kvId} --remote --limit 1`;
                 this.runWrangler(testCmd, { timeout: 10000 });
                 console.log('   ✅ Połączenie z KV działa');
             } catch (error) {
@@ -349,17 +344,13 @@ class DeltaSync {
                 process.exit(1);
             }
 
-            // 2. Załaduj starą bazę
             await this.loadFromKV();
             
-            // 3. Pobierz nowe dane
             console.log('\n2️⃣  Pobieranie danych z API ISZTAR...');
             await this.fetchFromIsztar();
             
-            // 4. Oblicz różnice
             this.calculateDiff();
             
-            // 5. Zapisz zmiany
             if (this.changes.added + this.changes.updated + this.changes.removed > 0) {
                 await this.saveToKV();
                 console.log('\n✅ SYNCHRONIZACJA ZAKOŃCZONA SUKCESEM!');
@@ -382,5 +373,4 @@ class DeltaSync {
     }
 }
 
-// Uruchom synchronizację
 new DeltaSync().run().catch(console.error);
