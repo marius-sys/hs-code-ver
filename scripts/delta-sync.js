@@ -21,6 +21,7 @@ class DeltaSync {
         this.kvId = "d4e909bdc6114613ab76635fadb855b2";
         this.kvKey = "HS_CURRENT_DATABASE";
         this.debugMode = process.argv.includes('--debug');
+        // Tylko do walidacji, nie używamy w komendach
         this.accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
         if (!this.accountId) {
             console.error('❌ Brak CLOUDFLARE_ACCOUNT_ID w środowisku!');
@@ -28,15 +29,15 @@ class DeltaSync {
         }
     }
 
-    // 🔧 Poprawiona składnia – account-id przed komendą
+    // 🔧 Uproszczona metoda – bez flagi --account-id, polegamy na zmiennych środowiskowych
     runWrangler(cmd, options = {}) {
-        const fullCmd = `npx wrangler --account-id ${this.accountId} ${cmd}`;
+        const fullCmd = `npx wrangler ${cmd}`;
         try {
             const stdout = execSync(fullCmd, {
                 encoding: 'utf8',
                 stdio: ['pipe', 'pipe', 'pipe'],
                 timeout: options.timeout || 60000,
-                env: { ...process.env }
+                env: { ...process.env } // przekazujemy wszystkie zmienne (w tym CLOUDFLARE_ACCOUNT_ID)
             });
             return { stdout, stderr: '' };
         } catch (error) {
@@ -332,7 +333,7 @@ class DeltaSync {
         const startTime = Date.now();
 
         try {
-            // 🔧 Test połączenia z KV z poprawną składnią (bez znaku =)
+            // 🔧 Test połączenia z KV – bez flagi --account-id
             console.log('\n1️⃣  Test połączenia z Cloudflare KV...');
             try {
                 const testCmd = `kv key list --namespace-id=${this.kvId} --remote --limit 1`;
