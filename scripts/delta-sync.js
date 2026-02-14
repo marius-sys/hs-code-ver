@@ -28,7 +28,6 @@ class DeltaSync {
         }
     }
 
-    // Uruchamia komendę wrangler, przekazując zmienne środowiskowe
     runWrangler(cmd, options = {}) {
         const fullCmd = `npx wrangler ${cmd}`;
         try {
@@ -169,8 +168,8 @@ class DeltaSync {
     async loadFromKV() {
         console.log(`\n📖 Wczytywanie starej bazy z KV (klucz: ${this.kvKey})...`);
         try {
-            // Używamy --remote, bo to działa dla operacji na kluczach
-            const cmd = `kv key get --namespace-id=${this.kvId} "${this.kvKey}" --remote --json`;
+            // Usunięto --json – wrangler 4 nie akceptuje tej flagi
+            const cmd = `kv key get --namespace-id=${this.kvId} "${this.kvKey}" --remote`;
             const { stdout } = this.runWrangler(cmd, { timeout: 60000 });
             
             if (stdout && stdout !== 'null' && !stdout.includes('ERROR') && !stdout.includes('NotFound')) {
@@ -330,15 +329,15 @@ class DeltaSync {
         const startTime = Date.now();
 
         try {
-            // Test połączenia: używamy `whoami` – nie wymaga żadnych opcji i sprawdza token
-            console.log('\n1️⃣  Test połączenia z Cloudflare...');
+            // Test połączenia – używamy komendy bez --remote
+            console.log('\n1️⃣  Test połączenia z Cloudflare KV...');
             try {
-                const testCmd = `whoami`;
+                const testCmd = `kv namespace list`; // bez --remote
                 this.runWrangler(testCmd, { timeout: 10000 });
                 console.log('   ✅ Połączenie z Cloudflare API działa');
             } catch (error) {
                 console.error('   ❌ Błąd połączenia z Cloudflare API:', error.message);
-                console.error('   Sprawdź: CLOUDFLARE_API_TOKEN i uprawnienia');
+                console.error('   Sprawdź: CLOUDFLARE_API_TOKEN i uprawnienia (przynajmniej do odczytu KV)');
                 process.exit(1);
             }
 
