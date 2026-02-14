@@ -21,7 +21,6 @@ class DeltaSync {
         this.kvId = "d4e909bdc6114613ab76635fadb855b2";
         this.kvKey = "HS_CURRENT_DATABASE";
         this.debugMode = process.argv.includes('--debug');
-        // Tylko do walidacji, nie używamy w komendach
         this.accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
         if (!this.accountId) {
             console.error('❌ Brak CLOUDFLARE_ACCOUNT_ID w środowisku!');
@@ -29,7 +28,6 @@ class DeltaSync {
         }
     }
 
-    // 🔧 Uproszczona metoda – bez flagi --account-id, polegamy na zmiennych środowiskowych
     runWrangler(cmd, options = {}) {
         const fullCmd = `npx wrangler ${cmd}`;
         try {
@@ -37,7 +35,7 @@ class DeltaSync {
                 encoding: 'utf8',
                 stdio: ['pipe', 'pipe', 'pipe'],
                 timeout: options.timeout || 60000,
-                env: { ...process.env } // przekazujemy wszystkie zmienne (w tym CLOUDFLARE_ACCOUNT_ID)
+                env: { ...process.env }
             });
             return { stdout, stderr: '' };
         } catch (error) {
@@ -235,7 +233,6 @@ class DeltaSync {
             throw new Error('Brak danych do zapisania');
         }
         
-        // 1. Backup starej bazy (jeśli istnieje)
         if (Object.keys(this.oldData).length > 0) {
             try {
                 console.log('   Tworzenie backupu starej bazy...');
@@ -253,7 +250,6 @@ class DeltaSync {
             }
         }
 
-        // 2. Zapis nowej bazy
         try {
             console.log(`   Zapis nowej bazy pod klucz: ${this.kvKey}...`);
             const dataStr = JSON.stringify(this.newData);
@@ -271,7 +267,6 @@ class DeltaSync {
             throw error;
         }
 
-        // 3. Zapis metadanych
         const metadata = {
             lastSync: new Date().toISOString(),
             totalRecords: Object.keys(this.newData).length,
@@ -333,15 +328,16 @@ class DeltaSync {
         const startTime = Date.now();
 
         try {
-            // 🔧 Test połączenia z KV – bez flagi --account-id
+            // 🔧 Test połączenia – bez użycia `--limit`
             console.log('\n1️⃣  Test połączenia z Cloudflare KV...');
             try {
-                const testCmd = `kv key list --namespace-id=${this.kvId} --remote --limit 1`;
+                // Używamy `kv namespace list`, która nie wymaga dodatkowych opcji i sprawdza dostęp do API
+                const testCmd = `kv namespace list --remote`;
                 this.runWrangler(testCmd, { timeout: 10000 });
-                console.log('   ✅ Połączenie z KV działa');
+                console.log('   ✅ Połączenie z Cloudflare API działa');
             } catch (error) {
-                console.error('   ❌ Błąd połączenia z KV:', error.message);
-                console.error('   Sprawdź: CLOUDFLARE_API_TOKEN i uprawnienia (KV:Edit)');
+                console.error('   ❌ Błąd połączenia z Cloudflare API:', error.message);
+                console.error('   Sprawdź: CLOUDFLARE_API_TOKEN i uprawnienia (przynajmniej do odczytu KV)');
                 process.exit(1);
             }
 
