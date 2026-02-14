@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 import fetch from 'node-fetch';
-import { execSync } from 'child_process';
+import { exec } from 'child_process';
 import { writeFileSync, unlinkSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import util from 'util';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const execAsync = util.promisify(exec);
 const TOTAL_PAGES = 21;
 
 class DeltaSync {
@@ -28,23 +30,23 @@ class DeltaSync {
         }
     }
 
-    // 🔧 Ulepszona metoda – nie rzuca wyjątkiem, zwraca obiekt z stdout/stderr
-    runWrangler(cmd, options = {}) {
+    // 🔧 Asynchroniczna metoda z dużym buforem
+    async runWrangler(cmd, options = {}) {
         const fullCmd = `npx wrangler ${cmd}`;
         try {
-            const stdout = execSync(fullCmd, {
+            const { stdout, stderr } = await execAsync(fullCmd, {
                 encoding: 'utf8',
-                stdio: ['pipe', 'pipe', 'pipe'],
                 timeout: options.timeout || 60000,
+                maxBuffer: 20 * 1024 * 1024, // 20MB - dla dużych baz
                 env: { ...process.env }
             });
-            return { stdout, stderr: '', exitCode: 0 };
+            return { stdout, stderr, exitCode: 0 };
         } catch (error) {
             // Wrangler często zwraca dane na stdout mimo błędu (np. ostrzeżenia na stderr)
             return {
-                stdout: error.stdout?.toString() || '',
-                stderr: error.stderr?.toString() || '',
-                exitCode: error.status || 1
+                stdout: error.stdout || '',
+                stderr: error.stderr || '',
+                exitCode: error.code || 1
             };
         }
     }
@@ -173,7 +175,7 @@ class DeltaSync {
         console.log(`\n📖 Wczytywanie starej bazy z KV (klucz: ${this.kvKey})...`);
         // Zwiększony timeout do 120s dla dużych baz
         const cmd = `kv key get --namespace-id=${this.kvId} "${this.kvKey}" --remote`;
-        const result = this.runWrangler(cmd, { timeout: 120000 });
+        const result = await this.runWrangler(cmd, { timeout: 120000 });
         
         if (result.stderr) {
             console.log(`   Uwaga (stderr): ${result.stderr.substring(0, 200)}...`);
@@ -187,8 +189,10 @@ class DeltaSync {
                 console.log(`   ✅ Znaleziono ${Object.keys(this.oldData).length} istniejących kodów`);
             } catch (parseError) {
                 console.log(`   ⚠️  Błąd parsowania JSON: ${parseError.message}`);
-                console.log(`   Otrzymany stdout (pierwsze 200 znaków): ${stdout.substring(0, 200)}...`);
-                this.oldData = {}; // zakładamy brak bazy
+                console.log(`   Otrzymany stdout (pierwsze 500 znaków): ${stdout.substring(0, 500)}...`);
+                console.log(`   Długość stdout: ${stdout.length} bajtów`);
+                // Jeśli parsowanie się nie udało, zakładamy brak bazy (ale logujemy problem)
+                this.oldData = {};
             }
         } else {
             console.log('   ℹ️  Brak istniejącej bazy lub klucz nie istnieje – pierwsza synchronizacja');
@@ -245,7 +249,7 @@ class DeltaSync {
                 writeFileSync(tmpFile, backupData);
                 
                 const cmd = `kv key put --namespace-id=${this.kvId} "HS_PREVIOUS_DATABASE" --path ${tmpFile} --remote`;
-                const result = this.runWrangler(cmd, { timeout: 60000 });
+                const result = await this.runWrangler(cmd, { timeout: 60000 });
                 if (result.stderr) console.log(`   Uwaga (stderr): ${result.stderr.substring(0, 200)}...`);
                 
                 unlinkSync(tmpFile);
@@ -263,7 +267,7 @@ class DeltaSync {
             writeFileSync(tmpFile, dataStr);
             
             const cmd = `kv key put --namespace-id=${this.kvId} "${this.kvKey}" --path ${tmpFile} --remote`;
-            const result = this.runWrangler(cmd, { timeout: 120000 });
+            const result = await this.runWrangler(cmd, { timeout: 120000 });
             if (result.stderr) console.log(`   Uwaga (stderr): ${result.stderr.substring(0, 200)}...`);
             
             unlinkSync(tmpFile);
@@ -289,7 +293,7 @@ class DeltaSync {
             writeFileSync(metaFile, JSON.stringify(metadata));
             
             const cmd = `kv key put --namespace-id=${this.kvId} "HS_METADATA" --path ${metaFile} --remote`;
-            const result = this.runWrangler(cmd, { timeout: 30000 });
+            const result = await this.runWrangler(cmd, { timeout: 30000 });
             if (result.stderr) console.log(`   Uwaga (stderr): ${result.stderr.substring(0, 200)}...`);
             
             unlinkSync(metaFile);
@@ -315,7 +319,7 @@ class DeltaSync {
             writeFileSync(metaFile, JSON.stringify(metadata));
             
             const cmd = `kv key put --namespace-id=${this.kvId} "HS_METADATA" --path ${metaFile} --remote`;
-            const result = this.runWrangler(cmd);
+            const result = await this.runWrangler(cmd);
             if (result.stderr) console.log(`   Uwaga (stderr): ${result.stderr.substring(0, 200)}...`);
             
             unlinkSync(metaFile);
@@ -341,7 +345,7 @@ class DeltaSync {
             // Test połączenia z Cloudflare API
             console.log('\n1️⃣  Test połączenia z Cloudflare KV...');
             const testCmd = `kv namespace list`;
-            const testResult = this.runWrangler(testCmd, { timeout: 10000 });
+            const testResult = await this.runWrangler(testCmd, { timeout: 10000 });
             if (testResult.stderr) {
                 console.log(`   Uwaga: ${testResult.stderr}`);
             }
