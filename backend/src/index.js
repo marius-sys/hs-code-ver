@@ -225,7 +225,7 @@ async function verifyHSCode(code, env) {
       const result = {
         success: false,
         code: cleanedCode,
-        description: 'Kod nieznany w systeme ISZTAR',
+        description: 'Kod nieznany w systemie ISZTAR',
         source: 'isztar_delta_database',
         isValid: false,
         sanctioned: isSanctioned,
