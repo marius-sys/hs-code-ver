@@ -399,14 +399,6 @@ input::placeholder {
     100% { box-shadow: 0 5px 15px rgba(33, 150, 243, 0.2); }
 }
 
-/* Styl dla sformatowanego opisu towaru */
-#result-desc br {
-    content: '';
-    display: block;
-    margin: 5px 0;
-    line-height: 1.4;
-}
-
 #result-desc {
     line-height: 1.6;
     margin-left: 10px;
