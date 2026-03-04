@@ -106,7 +106,7 @@ class HSCodeVerifier {
                 ${sanctionHtml}
                 ${controlledHtml}
                 <div><strong>Kod HS:</strong> ${code}</div>
-                <div><strong>Opis towaru:</strong> ${description}</div>
+                <div><strong>Opis towaru:</strong>${description}</div>
                 <div><strong>Status weryfikacji:</strong> <span style="color: ${this.getStatusColor(status)};">${status}</span></div>
                 ${extendedHtml}
             </div>
