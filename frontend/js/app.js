@@ -260,7 +260,7 @@ class HSCodeVerifier {
         if (data.formattedDescription) {
             descElement.innerHTML = `&nbsp;${data.formattedDescription}`;
         } else if (data.description) {
-            descElement.innerHTML = `&nbsp;${this.formatDescription(data.description)}`;
+            descElement.innerHTML = `${this.formatDescription(data.description)}`;
         } else {
             descElement.textContent = '';
         }
