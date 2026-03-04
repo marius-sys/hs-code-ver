@@ -56,16 +56,14 @@ class HSCodeVerifier {
 
     // Nowa metoda do kopiowania wyniku do schowka (dla e-maila)
     copyResultForEmail() {
-        // Pobierz aktualnie wyświetlane dane
         const code = document.getElementById('result-code').innerText.trim();
-        const description = document.getElementById('result-desc').innerHTML; // może zawierać <br>
+        let description = document.getElementById('result-desc').innerHTML;
+        description = description.replace(/^&nbsp;/, '').trim();  // <-- tutaj usuwamy &nbsp;
         const status = document.getElementById('result-status').innerText.trim();
-        
-        // Sprawdź, czy wyświetlono ostrzeżenia
+
         const sanctionVisible = !this.sanctionWarningTop.classList.contains('hidden');
         const controlledVisible = !this.controlledWarningTop.classList.contains('hidden');
-        
-        // Pobierz treść ostrzeżeń (jeśli widoczne)
+
         let sanctionHtml = '';
         if (sanctionVisible) {
             const sanctionMsg = document.getElementById('sanction-message')?.innerText || 'UWAGA: Towar sankcyjny - sprawdź obowiązujące ograniczenia!';
@@ -76,7 +74,7 @@ class HSCodeVerifier {
                 </div>
             `;
         }
-        
+
         let controlledHtml = '';
         if (controlledVisible) {
             const controlledMsg = document.getElementById('controlled-message')?.innerText || 'UWAGA: Towar podlega kontroli SANEPID!';
@@ -87,32 +85,28 @@ class HSCodeVerifier {
                 </div>
             `;
         }
-        
-        // Jeśli oba ostrzeżenia, pokaż tylko sankcyjne (zgodnie z logiką)
+
         if (sanctionVisible && controlledVisible) {
             controlledHtml = '';
         }
-        
-        // Rozszerzony kod (jeśli występuje)
+
         let extendedHtml = '';
         if (!this.extendedCodeInfo.classList.contains('hidden')) {
             const extendedText = this.extendedCodeSpan.innerText;
             extendedHtml = `<div style="font-family: Calibri, sans-serif; font-size: 11pt; margin-top: 8px;"><strong>Pełny kod 10-cyfrowy:</strong> ${extendedText}</div>`;
         }
-        
-        // Przygotuj pełny HTML do skopiowania
+
         const emailHtml = `
             <div style="font-family: Calibri, sans-serif; font-size: 11pt;">
                 ${sanctionHtml}
                 ${controlledHtml}
                 <div><strong>Kod HS:</strong> ${code}</div>
-                <div><strong>Opis towaru:</strong>${description}</div>
+                <div><strong>Opis towaru:</strong> ${description}</div>
                 <div><strong>Status weryfikacji:</strong> <span style="color: ${this.getStatusColor(status)};">${status}</span></div>
                 ${extendedHtml}
             </div>
         `;
-        
-        // Skopiuj do schowka jako HTML (działa w większości nowoczesnych przeglądarek)
+
         navigator.clipboard.write([
             new ClipboardItem({
                 'text/html': new Blob([emailHtml], { type: 'text/html' }),
