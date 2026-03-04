@@ -243,8 +243,6 @@ button {
 .result-item strong {
     min-width: 140px;
     color: var(--q4r-primary);
-    /* Zapewnia, że po dwukropku jest spacja */
-    white-space: pre;
 }
 
 #result-status {
