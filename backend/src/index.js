@@ -1,3 +1,15 @@
+if (url.pathname === '/login' && request.method === 'POST') {
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { headers });
+  }
+  // Prosta odpowiedź testowa
+  return Response.json({ message: 'Login endpoint works' }, { headers });
+}
 import bcrypt from 'bcryptjs';
 
 const RATE_LIMIT = {
