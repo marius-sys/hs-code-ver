@@ -1,4 +1,4 @@
-// frontend/js/app.js
+// frontend/js/app.js (wersja debug)
 class HSCodeVerifier {
     constructor() {
         this.apiBaseUrl = 'https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev';
@@ -6,6 +6,12 @@ class HSCodeVerifier {
         this.username = localStorage.getItem('username');
         this.role = localStorage.getItem('role');
         
+        console.log('[DEBUG] Constructor:', { 
+            token: this.token ? '***' : null, 
+            username: this.username, 
+            role: this.role 
+        });
+
         this.init();
     }
 
@@ -37,9 +43,12 @@ class HSCodeVerifier {
 
     async checkAuth() {
         if (!this.token) {
+            console.log('[DEBUG] Brak tokena – przekierowanie do login.html');
             window.location.href = 'login.html';
             return;
         }
+
+        console.log('[DEBUG] Wysyłanie żądania do /verify-session z tokenem:', this.token.substring(0, 10) + '...');
 
         try {
             const response = await fetch(`${this.apiBaseUrl}/verify-session`, {
@@ -48,7 +57,14 @@ class HSCodeVerifier {
                 }
             });
 
+            console.log('[DEBUG] Odpowiedź z /verify-session:', {
+                status: response.status,
+                statusText: response.statusText,
+                headers: [...response.headers.entries()]
+            });
+
             if (response.status === 401) {
+                console.log('[DEBUG] Serwer zwrócił 401 – usuwam token i przekierowuję');
                 localStorage.removeItem('token');
                 localStorage.removeItem('username');
                 localStorage.removeItem('role');
@@ -57,30 +73,34 @@ class HSCodeVerifier {
             }
 
             if (!response.ok) {
-                throw new Error('Błąd weryfikacji sesji');
+                console.log('[DEBUG] Błąd odpowiedzi (nie 401):', response.status);
+                // Tymczasowo nie przekierowujemy – pozwalamy użytkownikowi zobaczyć błąd
+                // window.location.href = 'login.html';
+                // return;
+                throw new Error(`HTTP ${response.status}`);
             }
 
             const data = await response.json();
+            console.log('[DEBUG] Dane z /verify-session:', data);
+
             this.username = data.username;
             this.role = data.role;
             
-            // Aktualizuj localStorage (na wypadek gdyby dane się zmieniły)
             localStorage.setItem('username', this.username);
             localStorage.setItem('role', this.role);
 
-            // Wyświetl nazwę użytkownika
             if (this.loggedUserSpan) {
                 this.loggedUserSpan.textContent = `Zalogowany: ${this.username}`;
             }
 
-            // Pokaż przycisk panelu admina jeśli rola to admin
             if (this.role === 'admin' && this.adminPanelBtn) {
                 this.adminPanelBtn.style.display = 'inline-flex';
             }
 
         } catch (error) {
-            console.error('Błąd autoryzacji:', error);
-            // W przypadku błędu sieciowego nie wylogowuj od razu, ale możesz spróbować ponownie później
+            console.error('[DEBUG] Błąd podczas weryfikacji sesji:', error);
+            // Tutaj możesz dodać tymczasowy komunikat, ale nie przekierowuj
+            alert('Błąd połączenia z serwerem. Sprawdź konsolę (F12).');
         }
     }
 
@@ -440,7 +460,6 @@ class HSCodeVerifier {
     }
 }
 
-// Inicjalizacja po załadowaniu DOM
 document.addEventListener('DOMContentLoaded', () => {
     new HSCodeVerifier();
 });
