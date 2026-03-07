@@ -12,34 +12,36 @@ let cacheTimestamp = 0;
 const CACHE_TTL = 5 * 60 * 1000;
 const SESSION_TTL = 60 * 60 * 24; // 24h w sekundach
 
-function checkRateLimit(ip) {
-  const today = new Date().toISOString().split('T')[0];
-  const key = `${ip}_${today}`;
-  
-  let data = dailyTracker.get(key);
-  if (!data) {
-    data = { count: 0, date: today };
-    dailyTracker.set(key, data);
-  }
-  
-  if (data.date !== today) {
-    dailyTracker.delete(key);
-    data = { count: 1, date: today };
-    dailyTracker.set(key, data);
-    return true;
-  }
-  
-  if (data.count >= RATE_LIMIT.maxRequests) {
-    return false;
-  }
-  
-  data.count++;
-  return true;
-}
+// ================== FUNKCJE POMOCNICZE ==================
 
 function getClientIP(request) {
   return request.headers.get('CF-Connecting-IP') || 'unknown';
 }
+
+// Obsługa CORS – pozwala na wiele dozwolonych originów (oddzielonych spacją)
+function getCorsHeaders(request, env) {
+  const origin = request.headers.get('Origin');
+  const allowedOrigins = (env.ALLOWED_ORIGINS || '').split(/\s+/).filter(Boolean);
+  
+  let allowedOrigin = '';
+  if (allowedOrigins.includes('*') || !origin) {
+    allowedOrigin = '*';
+  } else if (allowedOrigins.includes(origin)) {
+    allowedOrigin = origin;
+  } else {
+    // Jeśli origin nie jest dozwolony, nie zwracamy nagłówka CORS
+    return {};
+  }
+
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+}
+
+// ================== FUNKCJE BAZY DANYCH HS ==================
 
 async function getDatabase(env) {
   const now = Date.now();
@@ -462,20 +464,15 @@ async function logSearch(env, username, code, ip) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const corsHeaders = getCorsHeaders(request, env);
     
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': env.ALLOWED_ORIGINS || '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-    };
-    
+    // Obsługa preflight OPTIONS
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
     }
     
     // Endpointy publiczne (nie wymagają autoryzacji)
     if (url.pathname === '/health' && request.method === 'GET') {
-      // ... (bez zmian, jak w poprzedniej wersji)
       try {
         const hasDatabase = !!env.HS_DATABASE;
         let metadata = null;
@@ -532,7 +529,6 @@ export default {
     }
     
     if (url.pathname === '/stats' && request.method === 'GET') {
-      // ... (bez zmian)
       try {
         const hasDatabase = !!env.HS_DATABASE;
         let metadata = null;
@@ -598,7 +594,6 @@ export default {
     }
     
     if (url.pathname === '/sanctions' && request.method === 'GET') {
-      // ... (bez zmian)
       try {
         const hasDatabase = !!env.HS_DATABASE;
         let sanctionedData = null;
@@ -626,7 +621,6 @@ export default {
     }
     
     if (url.pathname === '/sanctions/update' && request.method === 'POST') {
-      // ... (bez zmian)
       const authToken = request.headers.get('Authorization');
       if (!env.SYNC_TOKEN || authToken !== `Bearer ${env.SYNC_TOKEN}`) {
         return Response.json(
@@ -676,7 +670,6 @@ export default {
     }
     
     if (url.pathname === '/controlled' && request.method === 'GET') {
-      // ... (bez zmian)
       try {
         const hasDatabase = !!env.HS_DATABASE;
         let controlledData = null;
@@ -705,7 +698,6 @@ export default {
     }
     
     if (url.pathname === '/controlled/update' && request.method === 'POST') {
-      // ... (bez zmian)
       const authToken = request.headers.get('Authorization');
       if (!env.SYNC_TOKEN || authToken !== `Bearer ${env.SYNC_TOKEN}`) {
         return Response.json(
@@ -760,7 +752,7 @@ export default {
       return handleLogin(request, env);
     }
     
-    // Endpointy wymagające tokena (oprócz /verify i /logs)
+    // Endpointy wymagające tokena
     const user = await getUserFromToken(request, env);
     
     if (url.pathname === '/verify-session' && request.method === 'GET') {
