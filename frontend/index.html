@@ -9,17 +9,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; }
-    </style>
 </head>
 <body>
     <div class="container">
         <header class="header">
-            <div class="user-panel">
-                <span id="logged-user"><i class="fas fa-user"></i> </span>
-                <button id="logoutBtn"><i class="fas fa-sign-out-alt"></i> Wyloguj</button>
-            </div>
             <div class="logo">
                 <img src="logo.svg" alt="Q4Rail Logo" class="logo-image">
                 <h1>HS CODE VERIFIER</h1>
@@ -29,6 +22,16 @@
                 <i class="fas fa-info-circle"></i>
                 Akceptowane formaty: 1234, 1234 56, 1234-56-78, 1234567890
             </p>
+            <!-- Elementy sterujące użytkownikiem -->
+            <div class="user-controls">
+                <span id="loggedUser" class="logged-user"></span>
+                <button id="adminPanelBtn" class="btn-secondary" style="display: none;">
+                    <i class="fas fa-cog"></i> Panel admina
+                </button>
+                <button id="logoutBtn" class="btn-secondary">
+                    <i class="fas fa-sign-out-alt"></i> Wyloguj
+                </button>
+            </div>
         </header>
 
         <main class="main">
@@ -97,7 +100,7 @@
                     <span id="extended-code" style="margin-left: 10px;"></span>
                 </div>
                 <button id="copyEmailBtn" class="btn-secondary" style="margin-top: 10px;">
-                     <i class="fas fa-copy"></i> Kopiuj do schowka
+                    <i class="fas fa-copy"></i> Kopiuj do schowka
                 </button>
                 <button id="newBtn" class="btn-secondary">
                     <i class="fas fa-redo-alt"></i> Sprawdź kolejny kod
