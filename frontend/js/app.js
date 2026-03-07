@@ -1,24 +1,16 @@
 class HSCodeVerifier {
     constructor() {
         this.apiBaseUrl = 'https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev';
-        this.token = localStorage.getItem('hs_token');
-        this.username = localStorage.getItem('hs_user');
-        this.role = localStorage.getItem('hs_role');
-
-        if (!this.token) {
-            window.location.href = '/login.html';
-            return;
-        }
-
+        this.token = localStorage.getItem('token');
+        this.username = localStorage.getItem('username');
+        this.role = localStorage.getItem('role');
+        
         this.init();
     }
 
-    async init() {
-        const valid = await this.verifySession();
-        if (!valid) {
-            this.logout();
-            return;
-        }
+    init() {
+        // Sprawdź czy token istnieje i jest ważny
+        this.checkAuth();
 
         this.hsCodeInput = document.getElementById('hsCode');
         this.verifyBtn = document.getElementById('verifyBtn');
@@ -32,50 +24,101 @@ class HSCodeVerifier {
         this.extendedCodeSpan = document.getElementById('extended-code');
         this.sanctionWarningTop = document.getElementById('sanction-warning-top');
         this.controlledWarningTop = document.getElementById('controlled-warning-top');
-        this.loggedUserSpan = document.getElementById('logged-user');
-        this.logoutBtn = document.getElementById('logoutBtn');
-
-        if (this.loggedUserSpan) {
-            this.loggedUserSpan.innerHTML = `<i class="fas fa-user"></i> ${this.username || ''}`;
-        }
-
-        if (this.logoutBtn) {
-            this.logoutBtn.addEventListener('click', () => this.logout());
-        }
-
+        
         this.bindEvents();
         this.checkAPI();
+        
+        // Pokaż nazwę użytkownika i przycisk admina jeśli rola admin
+        this.updateUserUI();
     }
 
-    async verifySession() {
+    async checkAuth() {
+        if (!this.token) {
+            window.location.href = 'login.html';
+            return;
+        }
+
         try {
             const response = await fetch(`${this.apiBaseUrl}/verify-session`, {
-                headers: { 'Authorization': `Bearer ${this.token}` }
+                headers: {
+                    'Authorization': `Bearer ${this.token}`
+                }
             });
+
             if (response.ok) {
                 const data = await response.json();
-                if (data.role !== this.role) {
-                    localStorage.setItem('hs_role', data.role);
-                    this.role = data.role;
-                }
-                return true;
+                // Odśwież dane w localStorage na wszelki wypadek
+                localStorage.setItem('username', data.username);
+                localStorage.setItem('role', data.role);
+                this.username = data.username;
+                this.role = data.role;
+            } else {
+                // Token nieważny
+                localStorage.removeItem('token');
+                localStorage.removeItem('username');
+                localStorage.removeItem('role');
+                window.location.href = 'login.html';
             }
-            return false;
-        } catch {
-            return false;
+        } catch (error) {
+            console.error('Błąd weryfikacji sesji:', error);
+            // W razie błędu sieci – może przekierować, ale lepiej pozwolić działać dalej?
+            // Na wszelki wypadek przekierujmy do logowania
+            window.location.href = 'login.html';
         }
     }
 
-    logout() {
-        fetch(`${this.apiBaseUrl}/logout`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${this.token}` }
-        }).finally(() => {
-            localStorage.removeItem('hs_token');
-            localStorage.removeItem('hs_user');
-            localStorage.removeItem('hs_role');
-            window.location.href = '/login.html';
+    updateUserUI() {
+        // Dodajemy kontener na dane użytkownika jeśli nie istnieje
+        let userControls = document.querySelector('.user-controls');
+        if (!userControls) {
+            userControls = document.createElement('div');
+            userControls.className = 'user-controls';
+            userControls.style.cssText = 'display: flex; gap: 10px; align-items: center; margin-bottom: 15px;';
+            // Wstaw przed głównym inputem? Najlepiej w header
+            const header = document.querySelector('.header');
+            if (header) {
+                header.appendChild(userControls);
+            } else {
+                // fallback
+                document.querySelector('.main')?.prepend(userControls);
+            }
+        }
+
+        userControls.innerHTML = `
+            <span id="loggedUser" style="color: white; background: rgba(255,255,255,0.2); padding: 5px 15px; border-radius: 20px;">
+                <i class="fas fa-user"></i> ${this.username}
+            </span>
+            <button id="adminPanelBtn" class="btn-secondary" style="${this.role !== 'admin' ? 'display: none;' : ''}">
+                <i class="fas fa-cog"></i> Panel admina
+            </button>
+            <button id="logoutBtn" class="btn-secondary">
+                <i class="fas fa-sign-out-alt"></i> Wyloguj
+            </button>
+        `;
+
+        document.getElementById('adminPanelBtn')?.addEventListener('click', () => {
+            window.location.href = 'admin.html';
         });
+
+        document.getElementById('logoutBtn').addEventListener('click', () => this.logout());
+    }
+
+    async logout() {
+        try {
+            await fetch(`${this.apiBaseUrl}/logout`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${this.token}`
+                }
+            });
+        } catch (error) {
+            console.error('Błąd wylogowania:', error);
+        } finally {
+            localStorage.removeItem('token');
+            localStorage.removeItem('username');
+            localStorage.removeItem('role');
+            window.location.href = 'login.html';
+        }
     }
 
     bindEvents() {
@@ -104,6 +147,7 @@ class HSCodeVerifier {
                 this.verify();
             });
         });
+
         document.getElementById('copyEmailBtn').addEventListener('click', () => this.copyResultForEmail());
     }
 
@@ -145,13 +189,7 @@ class HSCodeVerifier {
 
     async checkAPI() {
         try {
-            const response = await fetch(`${this.apiBaseUrl}/health`, {
-                headers: { 'Authorization': `Bearer ${this.token}` }
-            });
-            if (response.status === 401) {
-                this.logout();
-                return;
-            }
+            const response = await fetch(`${this.apiBaseUrl}/health`);
             const data = await response.json();
             if (response.ok) {
                 this.apiStatus.textContent = 'Działa ✓';
@@ -175,13 +213,9 @@ class HSCodeVerifier {
     async fetchAdditionalStats() {
         try {
             const [sanctionsRes, controlledRes] = await Promise.all([
-                fetch(`${this.apiBaseUrl}/sanctions`, { headers: { 'Authorization': `Bearer ${this.token}` } }),
-                fetch(`${this.apiBaseUrl}/controlled`, { headers: { 'Authorization': `Bearer ${this.token}` } })
+                fetch(`${this.apiBaseUrl}/sanctions`),
+                fetch(`${this.apiBaseUrl}/controlled`)
             ]);
-            if (sanctionsRes.status === 401 || controlledRes.status === 401) {
-                this.logout();
-                return;
-            }
             const sanctionsData = await sanctionsRes.json();
             const controlledData = await controlledRes.json();
             if (sanctionsData.success) {
@@ -210,16 +244,22 @@ class HSCodeVerifier {
         try {
             const response = await fetch(`${this.apiBaseUrl}/verify`, {
                 method: 'POST',
-                headers: {
+                headers: { 
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${this.token}`
                 },
                 body: JSON.stringify({ code: code })
             });
+
             if (response.status === 401) {
-                this.logout();
+                // Sesja wygasła – wyloguj
+                localStorage.removeItem('token');
+                localStorage.removeItem('username');
+                localStorage.removeItem('role');
+                window.location.href = 'login.html';
                 return;
             }
+
             const data = await response.json();
             this.displayResult(data);
         } catch (error) {
@@ -308,16 +348,6 @@ class HSCodeVerifier {
         this.result.classList.remove('hidden');
     }
 
-    showLoading(show) {
-        if (show) {
-            this.loading.classList.remove('hidden');
-            this.verifyBtn.disabled = true;
-        } else {
-            this.loading.classList.add('hidden');
-            this.verifyBtn.disabled = false;
-        }
-    }
-
     copyResultForEmail() {
         const code = document.getElementById('result-code').innerText.trim();
         let description = document.getElementById('result-desc').innerHTML;
@@ -382,7 +412,7 @@ class HSCodeVerifier {
             alert('Nie udało się skopiować automatycznie. Możesz zaznaczyć tekst ręcznie.');
         });
     }
-
+    
     getStatusColor(status) {
         if (status === 'SANKCJE' || status === 'NIEPOPRAWNY') return '#dc3545';
         if (status === 'SANEPID') return '#2196f3';
@@ -390,11 +420,21 @@ class HSCodeVerifier {
         if (status === 'POPRAWNY') return '#28a745';
         return '#000000';
     }
-
+    
     stripHtml(html) {
         const div = document.createElement('div');
         div.innerHTML = html;
         return div.textContent || div.innerText || '';
+    }
+
+    showLoading(show) {
+        if (show) {
+            this.loading.classList.remove('hidden');
+            this.verifyBtn.disabled = true;
+        } else {
+            this.loading.classList.add('hidden');
+            this.verifyBtn.disabled = false;
+        }
     }
 }
 
