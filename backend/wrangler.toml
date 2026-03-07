@@ -24,5 +24,9 @@ id = "0d2f1b8c65434fe5b1e04407a5777852"
 binding = "LOGS"
 id = "da60a876321c4026b10053c05ef0a59f"
 
+[[kv_namespaces]]
+binding = "USERS"
+id = "848ff6df2cb84046b48f1d64151f1cb7"
+
 [triggers]
 crons = ["0 3 * * *"]

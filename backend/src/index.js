@@ -365,7 +365,7 @@ async function handleCron(env, ctx) {
   return result;
 }
 
-// ================== AUTORYZACJA ==================
+// ================== AUTORYZACJA (UŻYTKOWNICY W KV) ==================
 
 async function getUserFromToken(request, env) {
   const auth = request.headers.get('Authorization');
@@ -379,25 +379,33 @@ async function getUserFromToken(request, env) {
 async function handleLogin(request, env) {
   try {
     const { username, password } = await request.json();
-    const users = JSON.parse(env.USERS || '{}');
-    const user = users[username];
-    if (!user) return new Response('Unauthorized', { status: 401 });
+    
+    // Pobierz użytkownika z KV
+    const userKey = `user:${username}`;
+    const userData = await env.USERS.get(userKey, 'json');
+    
+    if (!userData) {
+      return new Response('Unauthorized', { status: 401 });
+    }
 
-    const valid = await bcrypt.compare(password, user.hash);
-    if (!valid) return new Response('Unauthorized', { status: 401 });
+    const valid = await bcrypt.compare(password, userData.hash);
+    if (!valid) {
+      return new Response('Unauthorized', { status: 401 });
+    }
 
     const token = crypto.randomUUID();
     const sessionData = {
       username,
-      role: user.role,
+      role: userData.role,
       expires: Date.now() + SESSION_TTL * 1000
     };
     await env.SESSIONS.put(`session:${token}`, JSON.stringify(sessionData), {
       expirationTtl: SESSION_TTL
     });
 
-    return Response.json({ token, username, role: user.role });
+    return Response.json({ token, username, role: userData.role });
   } catch (e) {
+    console.error('Błąd logowania:', e);
     return new Response('Bad request', { status: 400 });
   }
 }
@@ -424,14 +432,12 @@ async function handleLogs(request, env) {
   }
 
   try {
-    // Pobierz listę kluczy logów (ostatnie 100)
     const list = await env.LOGS.list({ prefix: 'log:', limit: 100 });
     const logPromises = list.keys.map(async (key) => {
       const entry = await env.LOGS.get(key.name, 'json');
       return entry;
     });
     const logs = await Promise.all(logPromises);
-    // Sortuj malejąco po timestamp (od najnowszych)
     logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     return Response.json(logs);
   } catch (error) {
@@ -469,6 +475,7 @@ export default {
     
     // Endpointy publiczne (nie wymagają autoryzacji)
     if (url.pathname === '/health' && request.method === 'GET') {
+      // ... (bez zmian, jak w poprzedniej wersji)
       try {
         const hasDatabase = !!env.HS_DATABASE;
         let metadata = null;
@@ -525,6 +532,7 @@ export default {
     }
     
     if (url.pathname === '/stats' && request.method === 'GET') {
+      // ... (bez zmian)
       try {
         const hasDatabase = !!env.HS_DATABASE;
         let metadata = null;
@@ -590,6 +598,7 @@ export default {
     }
     
     if (url.pathname === '/sanctions' && request.method === 'GET') {
+      // ... (bez zmian)
       try {
         const hasDatabase = !!env.HS_DATABASE;
         let sanctionedData = null;
@@ -617,6 +626,7 @@ export default {
     }
     
     if (url.pathname === '/sanctions/update' && request.method === 'POST') {
+      // ... (bez zmian)
       const authToken = request.headers.get('Authorization');
       if (!env.SYNC_TOKEN || authToken !== `Bearer ${env.SYNC_TOKEN}`) {
         return Response.json(
@@ -666,6 +676,7 @@ export default {
     }
     
     if (url.pathname === '/controlled' && request.method === 'GET') {
+      // ... (bez zmian)
       try {
         const hasDatabase = !!env.HS_DATABASE;
         let controlledData = null;
@@ -694,6 +705,7 @@ export default {
     }
     
     if (url.pathname === '/controlled/update' && request.method === 'POST') {
+      // ... (bez zmian)
       const authToken = request.headers.get('Authorization');
       if (!env.SYNC_TOKEN || authToken !== `Bearer ${env.SYNC_TOKEN}`) {
         return Response.json(
@@ -798,7 +810,6 @@ export default {
         }
         
         const result = await verifyHSCode(code, env);
-        // Zapisz log w tle
         ctx.waitUntil(logSearch(env, user.username, code, clientIP));
         return Response.json(result, { headers: corsHeaders });
         

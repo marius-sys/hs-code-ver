@@ -36,12 +36,17 @@
     "verify": "echo 'Użyj: npm run verify -- --code=0101'",
     "test": "npm run test-sync && npm run test-isztar",
     "setup-kv": "node scripts/setup-kv.js",
-    "full-deploy": "npm run delta-sync && npm run deploy"
+    "full-deploy": "npm run delta-sync && npm run deploy",
+    "users-add": "node scripts/manage-users.js add",
+    "users-remove": "node scripts/manage-users.js remove",
+    "users-list": "node scripts/manage-users.js list",
+    "users-help": "node scripts/manage-users.js help"
   },
   "bin": {
     "hs-verify": "./scripts/cli-verifier.js"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "node-fetch": "^3.3.2"
   },
   "devDependencies": {
