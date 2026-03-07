@@ -16,5 +16,13 @@ ALLOWED_ORIGINS = "https://hs-code.q4rail.com"
 binding = "HS_DATABASE"
 id = "d4e909bdc6114613ab76635fadb855b2"
 
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "0d2f1b8c65434fe5b1e04407a5777852"
+
+[[kv_namespaces]]
+binding = "LOGS"
+id = "da60a876321c4026b10053c05ef0a59f"
+
 [triggers]
 crons = ["0 3 * * *"]

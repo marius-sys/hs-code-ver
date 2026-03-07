@@ -1,10 +1,25 @@
 class HSCodeVerifier {
     constructor() {
         this.apiBaseUrl = 'https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev';
+        this.token = localStorage.getItem('hs_token');
+        this.username = localStorage.getItem('hs_user');
+        this.role = localStorage.getItem('hs_role');
+
+        if (!this.token) {
+            window.location.href = '/login.html';
+            return;
+        }
+
         this.init();
     }
 
-    init() {
+    async init() {
+        const valid = await this.verifySession();
+        if (!valid) {
+            this.logout();
+            return;
+        }
+
         this.hsCodeInput = document.getElementById('hsCode');
         this.verifyBtn = document.getElementById('verifyBtn');
         this.loading = document.getElementById('loading');
@@ -17,9 +32,50 @@ class HSCodeVerifier {
         this.extendedCodeSpan = document.getElementById('extended-code');
         this.sanctionWarningTop = document.getElementById('sanction-warning-top');
         this.controlledWarningTop = document.getElementById('controlled-warning-top');
-        
+        this.loggedUserSpan = document.getElementById('logged-user');
+        this.logoutBtn = document.getElementById('logoutBtn');
+
+        if (this.loggedUserSpan) {
+            this.loggedUserSpan.innerHTML = `<i class="fas fa-user"></i> ${this.username || ''}`;
+        }
+
+        if (this.logoutBtn) {
+            this.logoutBtn.addEventListener('click', () => this.logout());
+        }
+
         this.bindEvents();
         this.checkAPI();
+    }
+
+    async verifySession() {
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/verify-session`, {
+                headers: { 'Authorization': `Bearer ${this.token}` }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                if (data.role !== this.role) {
+                    localStorage.setItem('hs_role', data.role);
+                    this.role = data.role;
+                }
+                return true;
+            }
+            return false;
+        } catch {
+            return false;
+        }
+    }
+
+    logout() {
+        fetch(`${this.apiBaseUrl}/logout`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${this.token}` }
+        }).finally(() => {
+            localStorage.removeItem('hs_token');
+            localStorage.removeItem('hs_user');
+            localStorage.removeItem('hs_role');
+            window.location.href = '/login.html';
+        });
     }
 
     bindEvents() {
@@ -36,11 +92,8 @@ class HSCodeVerifier {
             this.hsCodeInput.value = '';
             this.result.classList.add('hidden');
             this.extendedCodeInfo.classList.add('hidden');
-            
-            // Ukryj oba ostrzeżenia
             this.sanctionWarningTop.classList.add('hidden');
             this.controlledWarningTop.classList.add('hidden');
-            
             this.hsCodeInput.focus();
         });
         
@@ -54,11 +107,221 @@ class HSCodeVerifier {
         document.getElementById('copyEmailBtn').addEventListener('click', () => this.copyResultForEmail());
     }
 
-    // Nowa metoda do kopiowania wyniku do schowka (dla e-maila)
+    formatInput(input) {
+        let value = input.value.replace(/[^\d\s\-]/g, '');
+        value = value.replace(/\s+/g, ' ').trim();
+        
+        if (value.length > 4 && !value.includes(' ') && !value.includes('-')) {
+            const parts = [];
+            parts.push(value.substring(0, 4));
+            if (value.length > 4) parts.push(value.substring(4, 6));
+            if (value.length > 6) parts.push(value.substring(6, 8));
+            if (value.length > 8) parts.push(value.substring(8, 10));
+            value = parts.join(' ').trim();
+        }
+        input.value = value;
+    }
+
+    formatDescription(description) {
+        if (!description) return '';
+        const parts = description.split(' → ');
+        const lastIndex = parts.length - 1;
+        const isLastRemaining = parts[lastIndex].includes('Pozostałe');
+        const formattedParts = parts.map((part, index) => {
+            let formattedPart = part;
+            if (isLastRemaining) {
+                if (index >= lastIndex - 1) {
+                    formattedPart = `<strong>${part}</strong>`;
+                }
+            } else {
+                if (index === lastIndex) {
+                    formattedPart = `<strong>${part}</strong>`;
+                }
+            }
+            return formattedPart;
+        });
+        return formattedParts.join('<br>');
+    }
+
+    async checkAPI() {
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/health`, {
+                headers: { 'Authorization': `Bearer ${this.token}` }
+            });
+            if (response.status === 401) {
+                this.logout();
+                return;
+            }
+            const data = await response.json();
+            if (response.ok) {
+                this.apiStatus.textContent = 'Działa ✓';
+                this.apiStatus.style.color = '#28a745';
+                if (data.database) {
+                    this.dbFormat.textContent = data.database.hasBinding ? 'KV' : 'Brak';
+                    this.dbCount.textContent = data.database.totalRecords || '0';
+                    this.lastUpdate.textContent = data.database.lastSync || 'Nieznana';
+                }
+                this.fetchAdditionalStats();
+            } else {
+                this.apiStatus.textContent = 'Błąd ✗';
+                this.apiStatus.style.color = '#dc3545';
+            }
+        } catch {
+            this.apiStatus.textContent = 'Brak połączenia';
+            this.apiStatus.style.color = '#dc3545';
+        }
+    }
+
+    async fetchAdditionalStats() {
+        try {
+            const [sanctionsRes, controlledRes] = await Promise.all([
+                fetch(`${this.apiBaseUrl}/sanctions`, { headers: { 'Authorization': `Bearer ${this.token}` } }),
+                fetch(`${this.apiBaseUrl}/controlled`, { headers: { 'Authorization': `Bearer ${this.token}` } })
+            ]);
+            if (sanctionsRes.status === 401 || controlledRes.status === 401) {
+                this.logout();
+                return;
+            }
+            const sanctionsData = await sanctionsRes.json();
+            const controlledData = await controlledRes.json();
+            if (sanctionsData.success) {
+                console.log(`Aktualne sankcje: ${sanctionsData.totalCodes} kodów`);
+            }
+            if (controlledData.success) {
+                console.log(`Aktualna kontrola SANEPID: ${controlledData.totalCodes} kodów`);
+            }
+        } catch (error) {
+            console.log('Nie udało się pobrać dodatkowych statystyk:', error);
+        }
+    }
+
+    async verify() {
+        let code = this.hsCodeInput.value.trim();
+        const cleanedCode = code.replace(/[^\d]/g, '');
+        if (!cleanedCode || cleanedCode.length < 4) {
+            alert('Wprowadź poprawny kod HS (min. 4 cyfry)');
+            return;
+        }
+        if (cleanedCode.length > 10) {
+            alert('Kod HS może mieć maksymalnie 10 cyfr');
+            return;
+        }
+        this.showLoading(true);
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/verify`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.token}`
+                },
+                body: JSON.stringify({ code: code })
+            });
+            if (response.status === 401) {
+                this.logout();
+                return;
+            }
+            const data = await response.json();
+            this.displayResult(data);
+        } catch (error) {
+            alert('Błąd połączenia z serwerem');
+            console.error('Błąd weryfikacji:', error);
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    displayResult(data) {
+        console.log('Dane z API:', data);
+        const codeElement = document.getElementById('result-code');
+        codeElement.innerHTML = `&nbsp;${data.code}`;
+        
+        const descElement = document.getElementById('result-desc');
+        if (data.formattedDescription) {
+            descElement.innerHTML = `&nbsp;${data.formattedDescription}`;
+        } else if (data.description) {
+            descElement.innerHTML = `${this.formatDescription(data.description)}`;
+        } else {
+            descElement.textContent = '';
+        }
+        
+        const statusEl = document.getElementById('result-status');
+        let statusText = '';
+        if (data.specialStatus) {
+            if (data.specialStatus === 'SANKCJE') {
+                statusText = 'SANKCJE';
+                statusEl.className = 'sanctioned';
+            } else if (data.specialStatus === 'SANEPID') {
+                statusText = 'SANEPID';
+                statusEl.className = 'controlled-status';
+            }
+        } else if (data.isGeneralCode) {
+            statusText = 'KOD OGÓLNY';
+            statusEl.className = 'general';
+        } else if (data.isValid) {
+            statusText = 'POPRAWNY';
+            statusEl.className = 'valid';
+        } else {
+            statusText = 'NIEPOPRAWNY';
+            statusEl.className = 'invalid';
+        }
+        statusEl.innerHTML = `&nbsp;${statusText}`;
+        
+        if (statusEl.className === 'sanctioned' || statusEl.className === 'invalid') {
+            statusEl.style.color = '#dc3545';
+        } else if (statusEl.className === 'controlled-status') {
+            statusEl.style.color = '#2196f3';
+        } else if (statusEl.className === 'general') {
+            statusEl.style.color = '#152a5e';
+        } else if (statusEl.className === 'valid') {
+            statusEl.style.color = '#28a745';
+        }
+        
+        if ((data.isSingleSubcode || data.isExtendedFromPrefix) && data.originalCode) {
+            this.extendedCodeSpan.innerHTML = `&nbsp;${data.originalCode} → ${data.code}`;
+            this.extendedCodeInfo.classList.remove('hidden');
+        } else {
+            this.extendedCodeInfo.classList.add('hidden');
+        }
+        
+        if (data.sanctioned) {
+            this.sanctionWarningTop.classList.remove('hidden');
+            if (data.sanctionMessage) {
+                document.getElementById('sanction-message').textContent = data.sanctionMessage;
+            }
+        } else {
+            this.sanctionWarningTop.classList.add('hidden');
+        }
+        
+        if (data.controlled) {
+            this.controlledWarningTop.classList.remove('hidden');
+            if (data.controlMessage) {
+                document.getElementById('controlled-message').textContent = data.controlMessage;
+            }
+        } else {
+            this.controlledWarningTop.classList.add('hidden');
+        }
+        
+        if (data.sanctioned && data.controlled) {
+            this.controlledWarningTop.classList.add('hidden');
+        }
+        
+        this.result.classList.remove('hidden');
+    }
+
+    showLoading(show) {
+        if (show) {
+            this.loading.classList.remove('hidden');
+            this.verifyBtn.disabled = true;
+        } else {
+            this.loading.classList.add('hidden');
+            this.verifyBtn.disabled = false;
+        }
+    }
+
     copyResultForEmail() {
         const code = document.getElementById('result-code').innerText.trim();
         let description = document.getElementById('result-desc').innerHTML;
-        description = description.replace(/^&nbsp;/, '').trim();  // <-- tutaj usuwamy &nbsp;
+        description = description.replace(/^&nbsp;/, '').trim();
         const status = document.getElementById('result-status').innerText.trim();
 
         const sanctionVisible = !this.sanctionWarningTop.classList.contains('hidden');
@@ -119,8 +382,7 @@ class HSCodeVerifier {
             alert('Nie udało się skopiować automatycznie. Możesz zaznaczyć tekst ręcznie.');
         });
     }
-    
-    // Pomocnicza funkcja do określenia koloru statusu
+
     getStatusColor(status) {
         if (status === 'SANKCJE' || status === 'NIEPOPRAWNY') return '#dc3545';
         if (status === 'SANEPID') return '#2196f3';
@@ -128,215 +390,14 @@ class HSCodeVerifier {
         if (status === 'POPRAWNY') return '#28a745';
         return '#000000';
     }
-    
-    // Usuwa tagi HTML, zostawia czysty tekst (dla wersji plain text)
+
     stripHtml(html) {
         const div = document.createElement('div');
         div.innerHTML = html;
         return div.textContent || div.innerText || '';
     }
-
-    // ... reszta metod (formatInput, formatDescription, checkAPI, fetchAdditionalStats, verify, displayResult, showLoading)
-    // pozostaje bez zmian – patrz poprzednia wersja, ale uzupełniam poniżej dla kompletności
-
-    formatInput(input) {
-        let value = input.value.replace(/[^\d\s\-]/g, '');
-        value = value.replace(/\s+/g, ' ').trim();
-        
-        if (value.length > 4 && !value.includes(' ') && !value.includes('-')) {
-            const parts = [];
-            parts.push(value.substring(0, 4));
-            if (value.length > 4) parts.push(value.substring(4, 6));
-            if (value.length > 6) parts.push(value.substring(6, 8));
-            if (value.length > 8) parts.push(value.substring(8, 10));
-            value = parts.join(' ').trim();
-        }
-        input.value = value;
-    }
-
-    formatDescription(description) {
-        if (!description) return '';
-        const parts = description.split(' → ');
-        const lastIndex = parts.length - 1;
-        const isLastRemaining = parts[lastIndex].includes('Pozostałe');
-        const formattedParts = parts.map((part, index) => {
-            let formattedPart = part;
-            if (isLastRemaining) {
-                if (index >= lastIndex - 1) {
-                    formattedPart = `<strong>${part}</strong>`;
-                }
-            } else {
-                if (index === lastIndex) {
-                    formattedPart = `<strong>${part}</strong>`;
-                }
-            }
-            return formattedPart;
-        });
-        return formattedParts.join('<br>');
-    }
-
-    async checkAPI() {
-        try {
-            const response = await fetch(`${this.apiBaseUrl}/health`);
-            const data = await response.json();
-            if (response.ok) {
-                this.apiStatus.textContent = 'Działa ✓';
-                this.apiStatus.style.color = '#28a745';
-                if (data.database) {
-                    this.dbFormat.textContent = data.database.hasBinding ? 'KV' : 'Brak';
-                    this.dbCount.textContent = data.database.totalRecords || '0';
-                    this.lastUpdate.textContent = data.database.lastSync || 'Nieznana';
-                }
-                this.fetchAdditionalStats();
-            } else {
-                this.apiStatus.textContent = 'Błąd ✗';
-                this.apiStatus.style.color = '#dc3545';
-            }
-        } catch {
-            this.apiStatus.textContent = 'Brak połączenia';
-            this.apiStatus.style.color = '#dc3545';
-        }
-    }
-
-    async fetchAdditionalStats() {
-        try {
-            const [sanctionsRes, controlledRes] = await Promise.all([
-                fetch(`${this.apiBaseUrl}/sanctions`),
-                fetch(`${this.apiBaseUrl}/controlled`)
-            ]);
-            const sanctionsData = await sanctionsRes.json();
-            const controlledData = await controlledRes.json();
-            if (sanctionsData.success) {
-                console.log(`Aktualne sankcje: ${sanctionsData.totalCodes} kodów`);
-            }
-            if (controlledData.success) {
-                console.log(`Aktualna kontrola SANEPID: ${controlledData.totalCodes} kodów`);
-            }
-        } catch (error) {
-            console.log('Nie udało się pobrać dodatkowych statystyk:', error);
-        }
-    }
-
-    async verify() {
-        let code = this.hsCodeInput.value.trim();
-        const cleanedCode = code.replace(/[^\d]/g, '');
-        if (!cleanedCode || cleanedCode.length < 4) {
-            alert('Wprowadź poprawny kod HS (min. 4 cyfry)');
-            return;
-        }
-        if (cleanedCode.length > 10) {
-            alert('Kod HS może mieć maksymalnie 10 cyfr');
-            return;
-        }
-        this.showLoading(true);
-        try {
-            const response = await fetch(`${this.apiBaseUrl}/verify`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code: code })
-            });
-            const data = await response.json();
-            this.displayResult(data);
-        } catch (error) {
-            alert('Błąd połączenia z serwerem');
-            console.error('Błąd weryfikacji:', error);
-        } finally {
-            this.showLoading(false);
-        }
-    }
-
-    displayResult(data) {
-        console.log('Dane z API:', data);
-        const codeElement = document.getElementById('result-code');
-        codeElement.innerHTML = `&nbsp;${data.code}`;
-        
-        const descElement = document.getElementById('result-desc');
-        if (data.formattedDescription) {
-            descElement.innerHTML = `&nbsp;${data.formattedDescription}`;
-        } else if (data.description) {
-            descElement.innerHTML = `${this.formatDescription(data.description)}`;
-        } else {
-            descElement.textContent = '';
-        }
-        
-        const statusEl = document.getElementById('result-status');
-        let statusText = '';
-        if (data.specialStatus) {
-            if (data.specialStatus === 'SANKCJE') {
-                statusText = 'SANKCJE';
-                statusEl.className = 'sanctioned';
-            } else if (data.specialStatus === 'SANEPID') {
-                statusText = 'SANEPID';
-                statusEl.className = 'controlled-status';
-            }
-        } else if (data.isGeneralCode) {
-            statusText = 'KOD OGÓLNY';
-            statusEl.className = 'general';
-        } else if (data.isValid) {
-            statusText = 'POPRAWNY';
-            statusEl.className = 'valid';
-        } else {
-            statusText = 'NIEPOPRAWNY';
-            statusEl.className = 'invalid';
-        }
-        statusEl.innerHTML = `&nbsp;${statusText}`;
-        
-        // Kolory inline dla statusu
-        if (statusEl.className === 'sanctioned' || statusEl.className === 'invalid') {
-            statusEl.style.color = '#dc3545';
-        } else if (statusEl.className === 'controlled-status') {
-            statusEl.style.color = '#2196f3';
-        } else if (statusEl.className === 'general') {
-            statusEl.style.color = '#152a5e';
-        } else if (statusEl.className === 'valid') {
-            statusEl.style.color = '#28a745';
-        }
-        
-        if ((data.isSingleSubcode || data.isExtendedFromPrefix) && data.originalCode) {
-            this.extendedCodeSpan.innerHTML = `&nbsp;${data.originalCode} → ${data.code}`;
-            this.extendedCodeInfo.classList.remove('hidden');
-        } else {
-            this.extendedCodeInfo.classList.add('hidden');
-        }
-        
-        // Obsługa ostrzeżeń
-        if (data.sanctioned) {
-            this.sanctionWarningTop.classList.remove('hidden');
-            if (data.sanctionMessage) {
-                document.getElementById('sanction-message').textContent = data.sanctionMessage;
-            }
-        } else {
-            this.sanctionWarningTop.classList.add('hidden');
-        }
-        
-        if (data.controlled) {
-            this.controlledWarningTop.classList.remove('hidden');
-            if (data.controlMessage) {
-                document.getElementById('controlled-message').textContent = data.controlMessage;
-            }
-        } else {
-            this.controlledWarningTop.classList.add('hidden');
-        }
-        
-        if (data.sanctioned && data.controlled) {
-            this.controlledWarningTop.classList.add('hidden');
-        }
-        
-        this.result.classList.remove('hidden');
-    }
-
-    showLoading(show) {
-        if (show) {
-            this.loading.classList.remove('hidden');
-            this.verifyBtn.disabled = true;
-        } else {
-            this.loading.classList.add('hidden');
-            this.verifyBtn.disabled = false;
-        }
-    }
 }
 
-// Inicjalizacja po załadowaniu DOM
 document.addEventListener('DOMContentLoaded', () => {
     new HSCodeVerifier();
 });

@@ -1,15 +1,27 @@
+import bcrypt from 'bcryptjs';
 import { syncIsztarData } from './sync.js';
 
+// Stałe
 const RATE_LIMIT = {
   maxRequests: 20000,
   windowMs: 24 * 60 * 60 * 1000,
   message: 'Dzienny limit 20,000 zapytań został przekroczony.'
 };
 
+const SESSION_TTL = 60 * 60 * 24; // 24 godziny (w sekundach)
+
+// Cache i trackery
 const dailyTracker = new Map();
 let hsDatabaseCache = null;
 let cacheTimestamp = 0;
 const CACHE_TTL = 5 * 60 * 1000;
+
+// ------------------------------------------------------------
+// Funkcje pomocnicze (bez zmian)
+// ------------------------------------------------------------
+function getClientIP(request) {
+  return request.headers.get('CF-Connecting-IP') || 'unknown';
+}
 
 function checkRateLimit(ip) {
   const today = new Date().toISOString().split('T')[0];
@@ -34,10 +46,6 @@ function checkRateLimit(ip) {
   
   data.count++;
   return true;
-}
-
-function getClientIP(request) {
-  return request.headers.get('CF-Connecting-IP') || 'unknown';
 }
 
 async function getDatabase(env) {
@@ -71,21 +79,16 @@ function formatDescription(description) {
   const parts = description.split(' → ');
   const lastIndex = parts.length - 1;
   
-  // Sprawdź czy ostatnia część to "Pozostałe"
   const isLastRemaining = parts[lastIndex].includes('Pozostałe');
   
-  // Formatuj każdą część
   const formattedParts = parts.map((part, index) => {
     let formattedPart = part;
     
-    // Pogrubienie odpowiednich części
     if (isLastRemaining) {
-      // Jeśli ostatni to "Pozostałe", pogrubiamy ostatnie dwie części
       if (index >= lastIndex - 1) {
         formattedPart = `<strong>${part}</strong>`;
       }
     } else {
-      // W przeciwnym razie tylko ostatnią część
       if (index === lastIndex) {
         formattedPart = `<strong>${part}</strong>`;
       }
@@ -94,7 +97,6 @@ function formatDescription(description) {
     return formattedPart;
   });
   
-  // Połącz z <br> zamiast →
   return formattedParts.join('<br>');
 }
 
@@ -139,39 +141,21 @@ async function checkIfControlled(code, env) {
 }
 
 function normalizeHSCode(code) {
-  // Usuń wszystkie znaki niebędące cyframi
   let cleaned = code.replace(/\D/g, '');
   
-  // Jeśli kod ma 10 cyfr i kończy się zerami, usuń końcowe zera
-  // ale zostaw co najmniej 4 cyfry
   if (cleaned.length === 10 && cleaned.endsWith('0')) {
-    // Usuń końcowe zera
     let normalized = cleaned.replace(/0+$/, '');
-    
-    // Jeśli po usunięciu zer zostało mniej niż 4 cyfry, wróć do oryginału
     if (normalized.length < 4) {
       normalized = cleaned.substring(0, 4);
     }
-    
-    // Ale nie skracaj poniżej długości oryginalnego kodu (jeśli ktoś wpisał np. 6 cyfr)
-    // Zachowaj minimalną długość 4 cyfr
-    if (normalized.length < 4) {
-      normalized = cleaned.substring(0, 4);
-    }
-    
     return normalized;
   }
   
-  // Dla kodów o innych długościach, jeśli kończą się zerami i mają więcej niż 4 cyfry
-  // usuń końcowe zera, ale zostaw co najmniej 4 cyfry
   if (cleaned.length > 4 && cleaned.endsWith('0')) {
     let normalized = cleaned.replace(/0+$/, '');
-    
-    // Zawsze zostaw co najmniej 4 cyfry
     if (normalized.length < 4) {
       normalized = cleaned.substring(0, 4);
     }
-    
     return normalized;
   }
   
@@ -180,7 +164,6 @@ function normalizeHSCode(code) {
 
 async function verifyHSCode(code, env) {
   try {
-    // Normalizuj kod - usuń końcowe zera dla kodów > 4 cyfr
     let cleanedCode = normalizeHSCode(code);
     
     console.log(`🔍 Weryfikacja kodu: oryginalny=${code}, znormalizowany=${cleanedCode}`);
@@ -205,22 +188,18 @@ async function verifyHSCode(code, env) {
     
     const database = await getDatabase(env);
     
-    // Sprawdź czy kod jest sankcyjny lub pod kontrolą SANEPID
     const isSanctioned = await checkIfSanctioned(cleanedCode, env);
     const isControlled = await checkIfControlled(cleanedCode, env);
     
-    // 1. Znajdź wszystkie kody, które zaczynają się od cleanedCode (w tym dokładne dopasowanie)
     const allMatchingCodes = Object.keys(database)
       .filter(k => k.startsWith(cleanedCode))
       .sort();
     
     console.log(`📊 Znaleziono ${allMatchingCodes.length} pasujących kodów dla ${cleanedCode}`);
     
-    // 2. Podziel na dokładne dopasowanie i podkody
     const exactMatch = allMatchingCodes.find(k => k === cleanedCode);
     const subCodes = allMatchingCodes.filter(k => k !== cleanedCode);
     
-    // Jeśli nie znaleziono żadnego pasującego kodu
     if (allMatchingCodes.length === 0) {
       const result = {
         success: false,
@@ -245,7 +224,6 @@ async function verifyHSCode(code, env) {
       return result;
     }
     
-    // 3. Jeśli nie ma podkodów - to jest kod końcowy
     if (subCodes.length === 0) {
       const description = database[exactMatch];
       const formattedDescription = formatDescription(description);
@@ -277,7 +255,6 @@ async function verifyHSCode(code, env) {
       return result;
     }
     
-    // 4. Jeśli jest JEDEN podkod i NIE MA dokładnego dopasowania - rozszerz do pełnego kodu
     if (subCodes.length === 1 && !exactMatch) {
       const singleCode = subCodes[0];
       const paddedCode = singleCode.padEnd(10, '0');
@@ -309,7 +286,6 @@ async function verifyHSCode(code, env) {
       return result;
     }
     
-    // 5. Jeśli jest WIELE podkodów lub (JEDEN podkod i dokładne dopasowanie) - to kod ogólny
     if (subCodes.length > 0) {
       const description = exactMatch 
         ? database[exactMatch] 
@@ -345,7 +321,6 @@ async function verifyHSCode(code, env) {
       return result;
     }
     
-    // 6. Fallback - nie powinno się zdarzyć
     return {
       success: false,
       code: cleanedCode,
@@ -388,6 +363,166 @@ async function handleCron(env, ctx) {
   return result;
 }
 
+// ------------------------------------------------------------
+// NOWE FUNKCJE AUTORYZACJI
+// ------------------------------------------------------------
+
+/**
+ * Pobiera dane użytkownika z tokena (sprawdza ważność sesji)
+ */
+async function getUserFromToken(request, env) {
+  const auth = request.headers.get('Authorization');
+  if (!auth || !auth.startsWith('Bearer ')) return null;
+  
+  const token = auth.slice(7);
+  const sessionKey = `session:${token}`;
+  const sessionData = await env.SESSIONS.get(sessionKey, 'json');
+  
+  if (!sessionData) return null;
+  if (sessionData.expires < Date.now()) {
+    // Sesja wygasła – usuń ją
+    await env.SESSIONS.delete(sessionKey);
+    return null;
+  }
+  
+  return {
+    username: sessionData.username,
+    role: sessionData.role
+  };
+}
+
+/**
+ * Loguje wyszukiwanie kodu do KV LOGS
+ */
+async function logSearch(env, username, code, ip) {
+  try {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      username,
+      code,
+      ip
+    };
+    // Klucz: log:timestamp:username:code – timestamp malejąco
+    const key = `log:${Date.now()}:${username}:${code}`;
+    await env.LOGS.put(key, JSON.stringify(logEntry), {
+      expirationTtl: 60 * 60 * 24 * 30 // 30 dni
+    });
+  } catch (error) {
+    console.error('Błąd zapisu logu:', error);
+  }
+}
+
+/**
+ * Endpoint logowania
+ */
+async function handleLogin(request, env) {
+  try {
+    const { username, password } = await request.json();
+    
+    // Pobierz listę użytkowników z sekretu USERS (JSON)
+    const usersJson = env.USERS;
+    if (!usersJson) {
+      console.error('Brak sekretu USERS');
+      return new Response('Internal server error', { status: 500 });
+    }
+    
+    let users;
+    try {
+      users = JSON.parse(usersJson);
+    } catch (e) {
+      console.error('Nieprawidłowy JSON w sekrecie USERS');
+      return new Response('Internal server error', { status: 500 });
+    }
+    
+    const user = users[username];
+    if (!user) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+    
+    const valid = await bcrypt.compare(password, user.hash);
+    if (!valid) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+    
+    // Generuj token sesji
+    const token = crypto.randomUUID();
+    const sessionData = {
+      username,
+      role: user.role || 'user',
+      expires: Date.now() + SESSION_TTL * 1000
+    };
+    
+    await env.SESSIONS.put(`session:${token}`, JSON.stringify(sessionData), {
+      expirationTtl: SESSION_TTL
+    });
+    
+    return Response.json({
+      token,
+      username,
+      role: user.role || 'user'
+    });
+    
+  } catch (error) {
+    console.error('Błąd logowania:', error);
+    return new Response('Bad request', { status: 400 });
+  }
+}
+
+/**
+ * Endpoint wylogowania
+ */
+async function handleLogout(request, env) {
+  const auth = request.headers.get('Authorization');
+  if (auth && auth.startsWith('Bearer ')) {
+    const token = auth.slice(7);
+    await env.SESSIONS.delete(`session:${token}`);
+  }
+  return new Response('OK');
+}
+
+/**
+ * Endpoint weryfikacji sesji – zwraca dane użytkownika jeśli token ważny
+ */
+async function handleVerifySession(request, env) {
+  const user = await getUserFromToken(request, env);
+  if (!user) {
+    return new Response('Unauthorized', { status: 401 });
+  }
+  return Response.json(user);
+}
+
+/**
+ * Endpoint pobierania logów (tylko dla administratora)
+ */
+async function handleLogs(request, env) {
+  const user = await getUserFromToken(request, env);
+  if (!user || user.role !== 'admin') {
+    return new Response('Forbidden', { status: 403 });
+  }
+  
+  try {
+    // Pobierz ostatnie 100 logów (klucze zaczynające się od "log:")
+    const { keys } = await env.LOGS.list({ prefix: 'log:', limit: 100 });
+    
+    const logs = [];
+    for (const key of keys) {
+      const entry = await env.LOGS.get(key.name, 'json');
+      if (entry) logs.push(entry);
+    }
+    
+    // Sortuj malejąco po timestamp (który jest w kluczu, ale lepiej po polu timestamp)
+    logs.sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1));
+    
+    return Response.json(logs);
+  } catch (error) {
+    console.error('Błąd pobierania logów:', error);
+    return new Response('Internal server error', { status: 500 });
+  }
+}
+
+// ------------------------------------------------------------
+// Główny fetch
+// ------------------------------------------------------------
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -402,13 +537,15 @@ export default {
       return new Response(null, { headers: corsHeaders });
     }
     
+    // --------------------------------------------------------
+    // Endpointy publiczne (nie wymagają tokena)
+    // --------------------------------------------------------
+    
+    // CRON sync (zabezpieczony własnym sekretem)
     if (url.pathname === '/cron/sync' && request.method === 'POST') {
       const cronSecret = request.headers.get('X-Cron-Secret');
       if (!env.CRON_SECRET || cronSecret !== env.CRON_SECRET) {
-        return new Response('Unauthorized', { 
-          status: 401,
-          headers: corsHeaders 
-        });
+        return new Response('Unauthorized', { status: 401, headers: corsHeaders });
       }
       
       ctx.waitUntil(handleCron(env, ctx));
@@ -420,6 +557,7 @@ export default {
       }, { headers: corsHeaders });
     }
     
+    // Health check
     if (url.pathname === '/health' && request.method === 'GET') {
       try {
         const hasDatabase = !!env.HS_DATABASE;
@@ -459,12 +597,8 @@ export default {
             totalRecords: databaseSize,
             status: hasDatabase ? 'ok' : 'no_binding'
           },
-          sanctions: {
-            totalCodes: sanctionedCount
-          },
-          controlled: {
-            totalCodes: controlledCount
-          },
+          sanctions: { totalCodes: sanctionedCount },
+          controlled: { totalCodes: controlledCount },
           timestamp: new Date().toISOString()
         }, { headers: corsHeaders });
       } catch (error) {
@@ -476,46 +610,7 @@ export default {
       }
     }
     
-    if (url.pathname === '/verify' && request.method === 'POST') {
-      const clientIP = getClientIP(request);
-      if (!checkRateLimit(clientIP)) {
-        return Response.json(
-          { error: RATE_LIMIT.message },
-          { status: 429, headers: corsHeaders }
-        );
-      }
-      
-      try {
-        const body = await request.json();
-        const { code } = body;
-        
-        if (!code) {
-          return Response.json(
-            { error: 'Brak kodu HS' },
-            { status: 400, headers: corsHeaders }
-          );
-        }
-        
-        if (!env.HS_DATABASE) {
-          return Response.json({
-            success: false,
-            code: code,
-            description: 'Baza danych niedostępna',
-            error: 'DATABASE_UNAVAILABLE'
-          }, { headers: corsHeaders });
-        }
-        
-        const result = await verifyHSCode(code, env);
-        return Response.json(result, { headers: corsHeaders });
-        
-      } catch (error) {
-        return Response.json(
-          { error: 'Nieprawidłowy format danych' },
-          { status: 400, headers: corsHeaders }
-        );
-      }
-    }
-    
+    // Statystyki (publiczne)
     if (url.pathname === '/stats' && request.method === 'GET') {
       try {
         const hasDatabase = !!env.HS_DATABASE;
@@ -581,6 +676,7 @@ export default {
       }
     }
     
+    // Lista sankcji (publiczna – tylko odczyt)
     if (url.pathname === '/sanctions' && request.method === 'GET') {
       try {
         const hasDatabase = !!env.HS_DATABASE;
@@ -608,6 +704,7 @@ export default {
       }
     }
     
+    // Aktualizacja sankcji (wymaga SYNC_TOKEN)
     if (url.pathname === '/sanctions/update' && request.method === 'POST') {
       const authToken = request.headers.get('Authorization');
       if (!env.SYNC_TOKEN || authToken !== `Bearer ${env.SYNC_TOKEN}`) {
@@ -657,6 +754,7 @@ export default {
       }
     }
     
+    // Lista kontroli SANEPID (publiczna – tylko odczyt)
     if (url.pathname === '/controlled' && request.method === 'GET') {
       try {
         const hasDatabase = !!env.HS_DATABASE;
@@ -685,6 +783,7 @@ export default {
       }
     }
     
+    // Aktualizacja kontroli SANEPID (wymaga SYNC_TOKEN)
     if (url.pathname === '/controlled/update' && request.method === 'POST') {
       const authToken = request.headers.get('Authorization');
       if (!env.SYNC_TOKEN || authToken !== `Bearer ${env.SYNC_TOKEN}`) {
@@ -735,6 +834,89 @@ export default {
       }
     }
     
+    // --------------------------------------------------------
+    // Endpointy związane z autoryzacją użytkowników
+    // --------------------------------------------------------
+    
+    // Logowanie
+    if (url.pathname === '/login' && request.method === 'POST') {
+      return handleLogin(request, env);
+    }
+    
+    // Wylogowanie
+    if (url.pathname === '/logout' && request.method === 'POST') {
+      return handleLogout(request, env);
+    }
+    
+    // Weryfikacja sesji
+    if (url.pathname === '/verify-session' && request.method === 'GET') {
+      return handleVerifySession(request, env);
+    }
+    
+    // Logi (tylko admin)
+    if (url.pathname === '/logs' && request.method === 'GET') {
+      return handleLogs(request, env);
+    }
+    
+    // --------------------------------------------------------
+    // Endpointy chronione (wymagają tokena użytkownika)
+    // --------------------------------------------------------
+    
+    // Weryfikacja kodu HS
+    if (url.pathname === '/verify' && request.method === 'POST') {
+      // Sprawdź autoryzację
+      const user = await getUserFromToken(request, env);
+      if (!user) {
+        return new Response('Unauthorized', { status: 401, headers: corsHeaders });
+      }
+      
+      // Rate limiting
+      const clientIP = getClientIP(request);
+      if (!checkRateLimit(clientIP)) {
+        return Response.json(
+          { error: RATE_LIMIT.message },
+          { status: 429, headers: corsHeaders }
+        );
+      }
+      
+      try {
+        const body = await request.json();
+        const { code } = body;
+        
+        if (!code) {
+          return Response.json(
+            { error: 'Brak kodu HS' },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+        
+        if (!env.HS_DATABASE) {
+          return Response.json({
+            success: false,
+            code: code,
+            description: 'Baza danych niedostępna',
+            error: 'DATABASE_UNAVAILABLE'
+          }, { headers: corsHeaders });
+        }
+        
+        const result = await verifyHSCode(code, env);
+        
+        // Zapisz log w tle
+        ctx.waitUntil(logSearch(env, user.username, code, clientIP));
+        
+        return Response.json(result, { headers: corsHeaders });
+        
+      } catch (error) {
+        return Response.json(
+          { error: 'Nieprawidłowy format danych' },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+    
+    // --------------------------------------------------------
+    // Endpoint domyślny – informacje o API
+    // --------------------------------------------------------
     return Response.json({
       name: 'HS Code Verifier API v1.4.3',
       version: env.VERSION,
@@ -742,13 +924,17 @@ export default {
       worker: 'hs-code-verifier-api',
       url: 'https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev',
       endpoints: [
-        'GET /health - Status zdrowia systemu',
-        'POST /verify - Weryfikacja kodu HS (akceptuje formaty: 1234, 1234 56, 1234-56-78)',
-        'GET /stats - Statystyki bazy danych',
-        'GET /sanctions - Lista kodów sankcyjnych',
-        'POST /sanctions/update - Aktualizacja listy sankcji (wymaga tokenu)',
-        'GET /controlled - Lista kodów pod kontrolą SANEPID',
-        'POST /controlled/update - Aktualizacja listy kontroli SANEPID (wymaga tokenu)'
+        'GET  /health            - Status zdrowia systemu',
+        'POST /login             - Logowanie użytkownika',
+        'GET  /verify-session    - Sprawdza ważność sesji',
+        'POST /logout            - Wylogowanie',
+        'POST /verify            - Weryfikacja kodu HS (wymaga tokena)',
+        'GET  /stats             - Statystyki bazy danych',
+        'GET  /sanctions         - Lista kodów sankcyjnych',
+        'POST /sanctions/update  - Aktualizacja listy sankcji (wymaga SYNC_TOKEN)',
+        'GET  /controlled        - Lista kodów pod kontrolą SANEPID',
+        'POST /controlled/update - Aktualizacja listy kontroli SANEPID (wymaga SYNC_TOKEN)',
+        'GET  /logs              - Logi wyszukiwań (tylko admin)'
       ],
       timestamp: new Date().toISOString()
     }, { headers: corsHeaders });
