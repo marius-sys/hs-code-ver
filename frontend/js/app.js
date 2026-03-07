@@ -1,3 +1,4 @@
+// frontend/js/app.js
 class HSCodeVerifier {
     constructor() {
         this.apiBaseUrl = 'https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev';
@@ -9,9 +10,7 @@ class HSCodeVerifier {
     }
 
     init() {
-        // Sprawdź czy token istnieje i jest ważny
-        this.checkAuth();
-
+        // Elementy DOM
         this.hsCodeInput = document.getElementById('hsCode');
         this.verifyBtn = document.getElementById('verifyBtn');
         this.loading = document.getElementById('loading');
@@ -24,12 +23,16 @@ class HSCodeVerifier {
         this.extendedCodeSpan = document.getElementById('extended-code');
         this.sanctionWarningTop = document.getElementById('sanction-warning-top');
         this.controlledWarningTop = document.getElementById('controlled-warning-top');
-        
+        this.loggedUserSpan = document.getElementById('loggedUser');
+        this.adminPanelBtn = document.getElementById('adminPanelBtn');
+        this.logoutBtn = document.getElementById('logoutBtn');
+
+        // Sprawdź autoryzację
+        this.checkAuth();
+
+        // Bind events
         this.bindEvents();
         this.checkAPI();
-        
-        // Pokaż nazwę użytkownika i przycisk admina jeśli rola admin
-        this.updateUserUI();
     }
 
     async checkAuth() {
@@ -45,62 +48,91 @@ class HSCodeVerifier {
                 }
             });
 
-            if (response.ok) {
-                const data = await response.json();
-                // Odśwież dane w localStorage na wszelki wypadek
-                localStorage.setItem('username', data.username);
-                localStorage.setItem('role', data.role);
-                this.username = data.username;
-                this.role = data.role;
-            } else {
-                // Token nieważny
+            if (response.status === 401) {
                 localStorage.removeItem('token');
                 localStorage.removeItem('username');
                 localStorage.removeItem('role');
                 window.location.href = 'login.html';
+                return;
             }
+
+            if (!response.ok) {
+                throw new Error('Błąd weryfikacji sesji');
+            }
+
+            const data = await response.json();
+            this.username = data.username;
+            this.role = data.role;
+            
+            // Aktualizuj localStorage (na wypadek gdyby dane się zmieniły)
+            localStorage.setItem('username', this.username);
+            localStorage.setItem('role', this.role);
+
+            // Wyświetl nazwę użytkownika
+            if (this.loggedUserSpan) {
+                this.loggedUserSpan.textContent = `Zalogowany: ${this.username}`;
+            }
+
+            // Pokaż przycisk panelu admina jeśli rola to admin
+            if (this.role === 'admin' && this.adminPanelBtn) {
+                this.adminPanelBtn.style.display = 'inline-flex';
+            }
+
         } catch (error) {
-            console.error('Błąd weryfikacji sesji:', error);
-            // W razie błędu sieci – może przekierować, ale lepiej pozwolić działać dalej?
-            // Na wszelki wypadek przekierujmy do logowania
-            window.location.href = 'login.html';
+            console.error('Błąd autoryzacji:', error);
+            // W przypadku błędu sieciowego nie wylogowuj od razu, ale możesz spróbować ponownie później
         }
     }
 
-    updateUserUI() {
-        // Dodajemy kontener na dane użytkownika jeśli nie istnieje
-        let userControls = document.querySelector('.user-controls');
-        if (!userControls) {
-            userControls = document.createElement('div');
-            userControls.className = 'user-controls';
-            userControls.style.cssText = 'display: flex; gap: 10px; align-items: center; margin-bottom: 15px;';
-            // Wstaw przed głównym inputem? Najlepiej w header
-            const header = document.querySelector('.header');
-            if (header) {
-                header.appendChild(userControls);
-            } else {
-                // fallback
-                document.querySelector('.main')?.prepend(userControls);
-            }
+    bindEvents() {
+        if (this.verifyBtn) {
+            this.verifyBtn.addEventListener('click', () => this.verify());
         }
-
-        userControls.innerHTML = `
-            <span id="loggedUser" style="color: white; background: rgba(255,255,255,0.2); padding: 5px 15px; border-radius: 20px;">
-                <i class="fas fa-user"></i> ${this.username}
-            </span>
-            <button id="adminPanelBtn" class="btn-secondary" style="${this.role !== 'admin' ? 'display: none;' : ''}">
-                <i class="fas fa-cog"></i> Panel admina
-            </button>
-            <button id="logoutBtn" class="btn-secondary">
-                <i class="fas fa-sign-out-alt"></i> Wyloguj
-            </button>
-        `;
-
-        document.getElementById('adminPanelBtn')?.addEventListener('click', () => {
-            window.location.href = 'admin.html';
+        
+        if (this.hsCodeInput) {
+            this.hsCodeInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') this.verify();
+            });
+            
+            this.hsCodeInput.addEventListener('input', (e) => {
+                this.formatInput(e.target);
+            });
+        }
+        
+        const newBtn = document.getElementById('newBtn');
+        if (newBtn) {
+            newBtn.addEventListener('click', () => {
+                this.hsCodeInput.value = '';
+                this.result.classList.add('hidden');
+                this.extendedCodeInfo.classList.add('hidden');
+                this.sanctionWarningTop.classList.add('hidden');
+                this.controlledWarningTop.classList.add('hidden');
+                this.hsCodeInput.focus();
+            });
+        }
+        
+        document.querySelectorAll('.btn-example').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const code = e.target.dataset.code;
+                this.hsCodeInput.value = code;
+                this.verify();
+            });
         });
 
-        document.getElementById('logoutBtn').addEventListener('click', () => this.logout());
+        const copyEmailBtn = document.getElementById('copyEmailBtn');
+        if (copyEmailBtn) {
+            copyEmailBtn.addEventListener('click', () => this.copyResultForEmail());
+        }
+
+        if (this.logoutBtn) {
+            this.logoutBtn.addEventListener('click', () => this.logout());
+        }
+
+        if (this.adminPanelBtn) {
+            this.adminPanelBtn.addEventListener('click', () => {
+                window.location.href = 'admin.html';
+            });
+        }
     }
 
     async logout() {
@@ -112,43 +144,13 @@ class HSCodeVerifier {
                 }
             });
         } catch (error) {
-            console.error('Błąd wylogowania:', error);
+            console.error('Błąd podczas wylogowywania:', error);
         } finally {
             localStorage.removeItem('token');
             localStorage.removeItem('username');
             localStorage.removeItem('role');
             window.location.href = 'login.html';
         }
-    }
-
-    bindEvents() {
-        this.verifyBtn.addEventListener('click', () => this.verify());
-        this.hsCodeInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.verify();
-        });
-        
-        this.hsCodeInput.addEventListener('input', (e) => {
-            this.formatInput(e.target);
-        });
-        
-        document.getElementById('newBtn').addEventListener('click', () => {
-            this.hsCodeInput.value = '';
-            this.result.classList.add('hidden');
-            this.extendedCodeInfo.classList.add('hidden');
-            this.sanctionWarningTop.classList.add('hidden');
-            this.controlledWarningTop.classList.add('hidden');
-            this.hsCodeInput.focus();
-        });
-        
-        document.querySelectorAll('.btn-example').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const code = e.target.dataset.code;
-                this.hsCodeInput.value = code;
-                this.verify();
-            });
-        });
-
-        document.getElementById('copyEmailBtn').addEventListener('click', () => this.copyResultForEmail());
     }
 
     formatInput(input) {
@@ -252,7 +254,7 @@ class HSCodeVerifier {
             });
 
             if (response.status === 401) {
-                // Sesja wygasła – wyloguj
+                // Token wygasł lub jest nieprawidłowy
                 localStorage.removeItem('token');
                 localStorage.removeItem('username');
                 localStorage.removeItem('role');
@@ -348,6 +350,16 @@ class HSCodeVerifier {
         this.result.classList.remove('hidden');
     }
 
+    showLoading(show) {
+        if (show) {
+            this.loading.classList.remove('hidden');
+            this.verifyBtn.disabled = true;
+        } else {
+            this.loading.classList.add('hidden');
+            this.verifyBtn.disabled = false;
+        }
+    }
+
     copyResultForEmail() {
         const code = document.getElementById('result-code').innerText.trim();
         let description = document.getElementById('result-desc').innerHTML;
@@ -412,7 +424,7 @@ class HSCodeVerifier {
             alert('Nie udało się skopiować automatycznie. Możesz zaznaczyć tekst ręcznie.');
         });
     }
-    
+
     getStatusColor(status) {
         if (status === 'SANKCJE' || status === 'NIEPOPRAWNY') return '#dc3545';
         if (status === 'SANEPID') return '#2196f3';
@@ -420,24 +432,15 @@ class HSCodeVerifier {
         if (status === 'POPRAWNY') return '#28a745';
         return '#000000';
     }
-    
+
     stripHtml(html) {
         const div = document.createElement('div');
         div.innerHTML = html;
         return div.textContent || div.innerText || '';
     }
-
-    showLoading(show) {
-        if (show) {
-            this.loading.classList.remove('hidden');
-            this.verifyBtn.disabled = true;
-        } else {
-            this.loading.classList.add('hidden');
-            this.verifyBtn.disabled = false;
-        }
-    }
 }
 
+// Inicjalizacja po załadowaniu DOM
 document.addEventListener('DOMContentLoaded', () => {
     new HSCodeVerifier();
 });
