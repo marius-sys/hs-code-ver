@@ -43,6 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const loggedUserSpan = document.getElementById('loggedUser');
         const logoutBtn = document.getElementById('logoutBtn');
         const adminPanelBtn = document.getElementById('adminPanelBtn');
+        const homeBtn = document.getElementById('homeBtn');
 
         if (userInfo) userInfo.style.display = 'flex';
         
@@ -68,6 +69,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 localStorage.removeItem('token');
                 localStorage.removeItem('role');
                 window.location.href = '/login';
+            });
+        }
+        
+        if (homeBtn) {
+            homeBtn.addEventListener('click', () => {
+                window.location.href = '/';
             });
         }
     }
