@@ -18,8 +18,8 @@ function getClientIP(request) {
   return request.headers.get('CF-Connecting-IP') || 'unknown';
 }
 
-// Obsługa CORS – pozwala na wiele dozwolonych originów (oddzielonych spacją)
-function getCorsHeaders(request, env) {
+// Funkcja do tworzenia odpowiedzi z nagłówkami CORS
+function corsResponse(body, init, request, env) {
   const origin = request.headers.get('Origin');
   const allowedOrigins = (env.ALLOWED_ORIGINS || '').split(/\s+/).filter(Boolean);
   
@@ -29,16 +29,19 @@ function getCorsHeaders(request, env) {
   } else if (allowedOrigins.includes(origin)) {
     allowedOrigin = origin;
   } else {
-    // Jeśli origin nie jest dozwolony, nie zwracamy nagłówka CORS
-    return {};
+    // Jeśli origin nie jest dozwolony, zwracamy bez nagłówka CORS (ale to rzadkie)
+    allowedOrigin = '';
   }
 
-  return {
+  const headers = {
     'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
+    ...(init?.headers || {})
   };
+
+  return new Response(body, { ...init, headers });
 }
 
 // ================== FUNKCJE BAZY DANYCH HS ==================
@@ -354,7 +357,6 @@ async function getLastSyncDate(env) {
 
 async function handleCron(env, ctx) {
   console.log('🔄 Uruchomienie zaplanowanej synchronizacji CRON');
-  // UWAGA: zakładam, że w pliku sync.js jest funkcja syncIsztarData
   const { syncIsztarData } = await import('./sync.js');
   const result = await syncIsztarData(env, ctx);
   
@@ -388,12 +390,12 @@ async function handleLogin(request, env) {
     const userData = await env.USERS.get(userKey, 'json');
     
     if (!userData) {
-      return new Response('Unauthorized', { status: 401 });
+      return { success: false, status: 401, message: 'Unauthorized' };
     }
 
     const valid = await bcrypt.compare(password, userData.hash);
     if (!valid) {
-      return new Response('Unauthorized', { status: 401 });
+      return { success: false, status: 401, message: 'Unauthorized' };
     }
 
     const token = crypto.randomUUID();
@@ -406,17 +408,17 @@ async function handleLogin(request, env) {
       expirationTtl: SESSION_TTL
     });
 
-    return Response.json({ token, username, role: userData.role });
+    return { success: true, data: { token, username, role: userData.role } };
   } catch (e) {
     console.error('Błąd logowania:', e);
-    return new Response('Bad request', { status: 400 });
+    return { success: false, status: 400, message: 'Bad request' };
   }
 }
 
 async function handleVerifySession(request, env) {
   const user = await getUserFromToken(request, env);
-  if (!user) return new Response('Unauthorized', { status: 401 });
-  return Response.json({ username: user.username, role: user.role });
+  if (!user) return { success: false, status: 401, message: 'Unauthorized' };
+  return { success: true, data: { username: user.username, role: user.role } };
 }
 
 async function handleLogout(request, env) {
@@ -425,13 +427,13 @@ async function handleLogout(request, env) {
     const token = auth.slice(7);
     await env.SESSIONS.delete(`session:${token}`);
   }
-  return new Response('OK');
+  return { success: true, data: null };
 }
 
 async function handleLogs(request, env) {
   const user = await getUserFromToken(request, env);
   if (!user || user.role !== 'admin') {
-    return new Response('Forbidden', { status: 403 });
+    return { success: false, status: 403, message: 'Forbidden' };
   }
 
   try {
@@ -442,10 +444,10 @@ async function handleLogs(request, env) {
     });
     const logs = await Promise.all(logPromises);
     logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    return Response.json(logs);
+    return { success: true, data: logs };
   } catch (error) {
     console.error('Błąd pobierania logów:', error);
-    return new Response('Internal Server Error', { status: 500 });
+    return { success: false, status: 500, message: 'Internal Server Error' };
   }
 }
 
@@ -465,11 +467,10 @@ async function logSearch(env, username, code, ip) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const corsHeaders = getCorsHeaders(request, env);
     
     // Obsługa preflight OPTIONS
     if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: corsHeaders });
+      return corsResponse(null, { status: 204 }, request, env);
     }
     
     // Endpointy publiczne (nie wymagają autoryzacji)
@@ -501,7 +502,7 @@ export default {
           }
         }
         
-        return Response.json({
+        const body = JSON.stringify({
           status: 'healthy',
           version: env.VERSION,
           worker: 'hs-code-verifier-api',
@@ -519,13 +520,15 @@ export default {
             totalCodes: controlledCount
           },
           timestamp: new Date().toISOString()
-        }, { headers: corsHeaders });
+        });
+        return corsResponse(body, { status: 200, headers: { 'Content-Type': 'application/json' } }, request, env);
       } catch (error) {
-        return Response.json({
+        const body = JSON.stringify({
           status: 'degraded',
           error: error.message,
           timestamp: new Date().toISOString()
-        }, { status: 500, headers: corsHeaders });
+        });
+        return corsResponse(body, { status: 500, headers: { 'Content-Type': 'application/json' } }, request, env);
       }
     }
     
@@ -561,7 +564,7 @@ export default {
           }
         }
         
-        return Response.json({
+        const body = JSON.stringify({
           name: 'HS Code Verifier API v1.4.3',
           version: env.VERSION,
           worker: 'hs-code-verifier-api',
@@ -585,12 +588,11 @@ export default {
             description: 'per IP address'
           },
           timestamp: new Date().toISOString()
-        }, { headers: corsHeaders });
+        });
+        return corsResponse(body, { status: 200, headers: { 'Content-Type': 'application/json' } }, request, env);
       } catch (error) {
-        return Response.json(
-          { error: 'Błąd pobierania statystyk' },
-          { status: 500, headers: corsHeaders }
-        );
+        const body = JSON.stringify({ error: 'Błąd pobierania statystyk' });
+        return corsResponse(body, { status: 500, headers: { 'Content-Type': 'application/json' } }, request, env);
       }
     }
     
@@ -607,27 +609,24 @@ export default {
           }
         }
         
-        return Response.json({
+        const body = JSON.stringify({
           success: true,
           codes: sanctionedData ? sanctionedData.codes || [] : [],
           lastUpdated: sanctionedData ? sanctionedData.lastUpdated : null,
           totalCodes: sanctionedData && sanctionedData.codes ? sanctionedData.codes.length : 0
-        }, { headers: corsHeaders });
+        });
+        return corsResponse(body, { status: 200, headers: { 'Content-Type': 'application/json' } }, request, env);
       } catch (error) {
-        return Response.json(
-          { success: false, error: 'Błąd pobierania kodów sankcyjnych' },
-          { status: 500, headers: corsHeaders }
-        );
+        const body = JSON.stringify({ success: false, error: 'Błąd pobierania kodów sankcyjnych' });
+        return corsResponse(body, { status: 500, headers: { 'Content-Type': 'application/json' } }, request, env);
       }
     }
     
     if (url.pathname === '/sanctions/update' && request.method === 'POST') {
       const authToken = request.headers.get('Authorization');
       if (!env.SYNC_TOKEN || authToken !== `Bearer ${env.SYNC_TOKEN}`) {
-        return Response.json(
-          { error: 'Brak autoryzacji' },
-          { status: 401, headers: corsHeaders }
-        );
+        const body = JSON.stringify({ error: 'Brak autoryzacji' });
+        return corsResponse(body, { status: 401, headers: { 'Content-Type': 'application/json' } }, request, env);
       }
       
       try {
@@ -635,10 +634,8 @@ export default {
         const { codes } = body;
         
         if (!codes || !Array.isArray(codes)) {
-          return Response.json(
-            { error: 'Nieprawidłowy format danych. Oczekiwano tablicy "codes"' },
-            { status: 400, headers: corsHeaders }
-          );
+          const body = JSON.stringify({ error: 'Nieprawidłowy format danych. Oczekiwano tablicy "codes"' });
+          return corsResponse(body, { status: 400, headers: { 'Content-Type': 'application/json' } }, request, env);
         }
         
         const validCodes = codes.filter(code => /^\d{4}$/.test(code));
@@ -656,17 +653,16 @@ export default {
         
         await env.HS_DATABASE.put('HS_SANCTIONED_CODES', JSON.stringify(data));
         
-        return Response.json({
+        const responseBody = JSON.stringify({
           success: true,
           message: `Zaktualizowano ${validCodes.length} kodów sankcyjnych`,
           data: data
-        }, { headers: corsHeaders });
+        });
+        return corsResponse(responseBody, { status: 200, headers: { 'Content-Type': 'application/json' } }, request, env);
         
       } catch (error) {
-        return Response.json(
-          { error: 'Nieprawidłowy format danych', details: error.message },
-          { status: 400, headers: corsHeaders }
-        );
+        const body = JSON.stringify({ error: 'Nieprawidłowy format danych', details: error.message });
+        return corsResponse(body, { status: 400, headers: { 'Content-Type': 'application/json' } }, request, env);
       }
     }
     
@@ -683,28 +679,25 @@ export default {
           }
         }
         
-        return Response.json({
+        const body = JSON.stringify({
           success: true,
           codes: controlledData ? controlledData.codes || [] : [],
           lastUpdated: controlledData ? controlledData.lastUpdated : null,
           totalCodes: controlledData && controlledData.codes ? controlledData.codes.length : 0,
           listType: 'sanepid_control'
-        }, { headers: corsHeaders });
+        });
+        return corsResponse(body, { status: 200, headers: { 'Content-Type': 'application/json' } }, request, env);
       } catch (error) {
-        return Response.json(
-          { success: false, error: 'Błąd pobierania kodów kontroli SANEPID' },
-          { status: 500, headers: corsHeaders }
-        );
+        const body = JSON.stringify({ success: false, error: 'Błąd pobierania kodów kontroli SANEPID' });
+        return corsResponse(body, { status: 500, headers: { 'Content-Type': 'application/json' } }, request, env);
       }
     }
     
     if (url.pathname === '/controlled/update' && request.method === 'POST') {
       const authToken = request.headers.get('Authorization');
       if (!env.SYNC_TOKEN || authToken !== `Bearer ${env.SYNC_TOKEN}`) {
-        return Response.json(
-          { error: 'Brak autoryzacji' },
-          { status: 401, headers: corsHeaders }
-        );
+        const body = JSON.stringify({ error: 'Brak autoryzacji' });
+        return corsResponse(body, { status: 401, headers: { 'Content-Type': 'application/json' } }, request, env);
       }
       
       try {
@@ -712,10 +705,8 @@ export default {
         const { codes } = body;
         
         if (!codes || !Array.isArray(codes)) {
-          return Response.json(
-            { error: 'Nieprawidłowy format danych. Oczekiwano tablicy "codes"' },
-            { status: 400, headers: corsHeaders }
-          );
+          const body = JSON.stringify({ error: 'Nieprawidłowy format danych. Oczekiwano tablicy "codes"' });
+          return corsResponse(body, { status: 400, headers: { 'Content-Type': 'application/json' } }, request, env);
         }
         
         const validCodes = codes.filter(code => /^\d{4}$/.test(code));
@@ -734,52 +725,72 @@ export default {
         
         await env.HS_DATABASE.put('HS_CONTROLLED_CODES', JSON.stringify(data));
         
-        return Response.json({
+        const responseBody = JSON.stringify({
           success: true,
           message: `Zaktualizowano ${validCodes.length} kodów pod kontrolą SANEPID`,
           data: data
-        }, { headers: corsHeaders });
+        });
+        return corsResponse(responseBody, { status: 200, headers: { 'Content-Type': 'application/json' } }, request, env);
         
       } catch (error) {
-        return Response.json(
-          { error: 'Nieprawidłowy format danych', details: error.message },
-          { status: 400, headers: corsHeaders }
-        );
+        const body = JSON.stringify({ error: 'Nieprawidłowy format danych', details: error.message });
+        return corsResponse(body, { status: 400, headers: { 'Content-Type': 'application/json' } }, request, env);
       }
     }
     
-    // Endpointy autoryzacji (nie wymagają tokena)
+    // Endpoint logowania
     if (url.pathname === '/login' && request.method === 'POST') {
-      return handleLogin(request, env);
+      const result = await handleLogin(request, env);
+      if (result.success) {
+        const body = JSON.stringify(result.data);
+        return corsResponse(body, { status: 200, headers: { 'Content-Type': 'application/json' } }, request, env);
+      } else {
+        const body = JSON.stringify({ error: result.message });
+        return corsResponse(body, { status: result.status, headers: { 'Content-Type': 'application/json' } }, request, env);
+      }
     }
     
     // Endpointy wymagające tokena
     const user = await getUserFromToken(request, env);
     
     if (url.pathname === '/verify-session' && request.method === 'GET') {
-      if (!user) return new Response('Unauthorized', { status: 401 });
-      return Response.json({ username: user.username, role: user.role });
+      const result = await handleVerifySession(request, env);
+      if (result.success) {
+        const body = JSON.stringify(result.data);
+        return corsResponse(body, { status: 200, headers: { 'Content-Type': 'application/json' } }, request, env);
+      } else {
+        const body = JSON.stringify({ error: result.message });
+        return corsResponse(body, { status: result.status, headers: { 'Content-Type': 'application/json' } }, request, env);
+      }
     }
     
     if (url.pathname === '/logout' && request.method === 'POST') {
-      return handleLogout(request, env);
+      const result = await handleLogout(request, env);
+      const body = JSON.stringify({ success: true });
+      return corsResponse(body, { status: 200, headers: { 'Content-Type': 'application/json' } }, request, env);
     }
     
     if (url.pathname === '/logs' && request.method === 'GET') {
-      return handleLogs(request, env);
+      const result = await handleLogs(request, env);
+      if (result.success) {
+        const body = JSON.stringify(result.data);
+        return corsResponse(body, { status: 200, headers: { 'Content-Type': 'application/json' } }, request, env);
+      } else {
+        const body = JSON.stringify({ error: result.message });
+        return corsResponse(body, { status: result.status, headers: { 'Content-Type': 'application/json' } }, request, env);
+      }
     }
     
     if (url.pathname === '/verify' && request.method === 'POST') {
       if (!user) {
-        return new Response('Unauthorized', { status: 401 });
+        const body = JSON.stringify({ error: 'Unauthorized' });
+        return corsResponse(body, { status: 401, headers: { 'Content-Type': 'application/json' } }, request, env);
       }
       
       const clientIP = getClientIP(request);
       if (!checkRateLimit(clientIP)) {
-        return Response.json(
-          { error: RATE_LIMIT.message },
-          { status: 429, headers: corsHeaders }
-        );
+        const body = JSON.stringify({ error: RATE_LIMIT.message });
+        return corsResponse(body, { status: 429, headers: { 'Content-Type': 'application/json' } }, request, env);
       }
       
       try {
@@ -787,35 +798,33 @@ export default {
         const { code } = body;
         
         if (!code) {
-          return Response.json(
-            { error: 'Brak kodu HS' },
-            { status: 400, headers: corsHeaders }
-          );
+          const body = JSON.stringify({ error: 'Brak kodu HS' });
+          return corsResponse(body, { status: 400, headers: { 'Content-Type': 'application/json' } }, request, env);
         }
         
         if (!env.HS_DATABASE) {
-          return Response.json({
+          const body = JSON.stringify({
             success: false,
             code: code,
             description: 'Baza danych niedostępna',
             error: 'DATABASE_UNAVAILABLE'
-          }, { headers: corsHeaders });
+          });
+          return corsResponse(body, { status: 200, headers: { 'Content-Type': 'application/json' } }, request, env);
         }
         
         const result = await verifyHSCode(code, env);
         ctx.waitUntil(logSearch(env, user.username, code, clientIP));
-        return Response.json(result, { headers: corsHeaders });
+        const responseBody = JSON.stringify(result);
+        return corsResponse(responseBody, { status: 200, headers: { 'Content-Type': 'application/json' } }, request, env);
         
       } catch (error) {
-        return Response.json(
-          { error: 'Nieprawidłowy format danych' },
-          { status: 400, headers: corsHeaders }
-        );
+        const body = JSON.stringify({ error: 'Nieprawidłowy format danych' });
+        return corsResponse(body, { status: 400, headers: { 'Content-Type': 'application/json' } }, request, env);
       }
     }
     
     // Domyślna odpowiedź (root)
-    return Response.json({
+    const body = JSON.stringify({
       name: 'HS Code Verifier API v1.4.3',
       version: env.VERSION,
       description: 'System weryfikacji kodów celnych HS z bazą ISZTAR',
@@ -835,7 +844,8 @@ export default {
         'POST /controlled/update - Aktualizacja listy kontroli SANEPID (wymaga tokenu)'
       ],
       timestamp: new Date().toISOString()
-    }, { headers: corsHeaders });
+    });
+    return corsResponse(body, { status: 200, headers: { 'Content-Type': 'application/json' } }, request, env);
   },
   
   async scheduled(event, env, ctx) {
