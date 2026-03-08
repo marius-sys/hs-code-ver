@@ -1,8 +1,8 @@
 {
   "name": "hs-code-ver",
-  "version": "1.4.3",
+  "version": "1.5.0",
   "type": "module",
-  "description": "System weryfikacji kodów celnych HS z bazą ISZTAR i systemami ostrzeżeń",
+  "description": "System weryfikacji kodów celnych HS z bazą ISZTAR, logowaniem i panelem administratora",
   "keywords": [
     "hs-codes",
     "customs",
@@ -11,8 +11,8 @@
     "sanepid",
     "sanctions"
   ],
-  "author": "Q4Rail Sp. z o.o.",
-  "license": "MIT",
+  "author": "Mariusz Wozniak",
+  "license": "GPL-3.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/marius-sys/hs-code-ver"
