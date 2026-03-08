@@ -1,6 +1,9 @@
 import { sign, verify } from 'jsonwebtoken';
 import { syncIsztarData } from './sync.js';
 
+// ============================================================
+// STAŁE I KONFIGURACJA
+// ============================================================
 const RATE_LIMIT = {
   maxRequests: 20000,
   windowMs: 24 * 60 * 60 * 1000,
@@ -12,9 +15,9 @@ let hsDatabaseCache = null;
 let cacheTimestamp = 0;
 const CACHE_TTL = 5 * 60 * 1000;
 
-// ------------------------------------------------------------
-// Funkcje pomocnicze JWT
-// ------------------------------------------------------------
+// ============================================================
+// FUNKCJE POMOCNICZE JWT I HASHOWANIA
+// ============================================================
 function generateToken(payload, secret, expiresIn = '7d') {
   return sign(payload, secret, { expiresIn });
 }
@@ -27,9 +30,6 @@ function verifyToken(token, secret) {
   }
 }
 
-// ------------------------------------------------------------
-// Hashowanie hasła
-// ------------------------------------------------------------
 async function hashPassword(password, salt) {
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
@@ -46,28 +46,9 @@ async function hashPassword(password, salt) {
     .replace(/\//g, '_');
 }
 
-// ------------------------------------------------------------
-// Logowanie zapytań do KV
-// ------------------------------------------------------------
-async function logQuery(env, userId, code, ip) {
-  try {
-    const timestamp = Date.now();
-    const key = `log:${timestamp}:${userId}`;
-    const logEntry = {
-      userId,
-      code,
-      ip,
-      timestamp: new Date().toISOString()
-    };
-    await env.HS_DATABASE.put(key, JSON.stringify(logEntry));
-  } catch (error) {
-    console.error('Błąd logowania:', error);
-  }
-}
-
-// ------------------------------------------------------------
-// Funkcje pomocnicze (bez zmian z wersji 1.4.3)
-// ------------------------------------------------------------
+// ============================================================
+// FUNKCJE POMOCNICZNE (z wersji 1.4.3)
+// ============================================================
 function checkRateLimit(ip) {
   const today = new Date().toISOString().split('T')[0];
   const key = `${ip}_${today}`;
@@ -192,9 +173,6 @@ function normalizeHSCode(code) {
   
   if (cleaned.length === 10 && cleaned.endsWith('0')) {
     let normalized = cleaned.replace(/0+$/, '');
-    if (normalized.length < 4) {
-      normalized = cleaned.substring(0, 4);
-    }
     if (normalized.length < 4) {
       normalized = cleaned.substring(0, 4);
     }
@@ -413,40 +391,101 @@ async function handleCron(env, ctx) {
   return result;
 }
 
-// ------------------------------------------------------------
-// Endpointy logowania i admina
-// ------------------------------------------------------------
-async function handleLogin(request, env) {
+// ============================================================
+// LOGOWANIE ZAPYTAŃ DO KV
+// ============================================================
+async function logQuery(env, userId, code, ip) {
   try {
-    const { username, password } = await request.json();
+    const timestamp = Date.now();
+    const key = `log:${timestamp}:${userId}`;
+    const logEntry = {
+      userId,
+      code,
+      ip,
+      timestamp: new Date().toISOString()
+    };
+    await env.HS_DATABASE.put(key, JSON.stringify(logEntry));
+  } catch (error) {
+    console.error('Błąd logowania:', error);
+  }
+}
+
+// ============================================================
+// ENDPOINTY LOGOWANIA I ADMINA
+// ============================================================
+async function handleLogin(request, env) {
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': env.ALLOWED_ORIGINS || '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+  };
+
+  console.log('🔐 handleLogin: rozpoczęcie');
+  try {
+    const body = await request.json();
+    console.log('🔐 handleLogin: body odebrane', body);
+    const { username, password } = body;
+
     if (!username || !password) {
-      return Response.json({ error: 'Brak nazwy użytkownika lub hasła' }, { status: 400 });
+      console.log('🔐 handleLogin: brak nazwy użytkownika lub hasła');
+      return Response.json(
+        { success: false, error: 'Brak nazwy użytkownika lub hasła' },
+        { status: 400, headers: corsHeaders }
+      );
     }
 
+    console.log('🔐 handleLogin: szukanie użytkownika', username);
     const userData = await env.HS_DATABASE.get(`user:${username}`, 'json');
+    console.log('🔐 handleLogin: userData', userData);
+
     if (!userData) {
-      return Response.json({ error: 'Nieprawidłowe dane logowania' }, { status: 401 });
+      console.log('🔐 handleLogin: użytkownik nie istnieje');
+      return Response.json(
+        { success: false, error: 'Nieprawidłowe dane logowania' },
+        { status: 401, headers: corsHeaders }
+      );
     }
 
+    console.log('🔐 handleLogin: haszowanie hasła');
     const hash = await hashPassword(password, env.JWT_SECRET + username);
+    console.log('🔐 handleLogin: hash otrzymany', hash);
+
     if (hash !== userData.passwordHash) {
-      return Response.json({ error: 'Nieprawidłowe dane logowania' }, { status: 401 });
+      console.log('🔐 handleLogin: nieprawidłowe hasło');
+      return Response.json(
+        { success: false, error: 'Nieprawidłowe dane logowania' },
+        { status: 401, headers: corsHeaders }
+      );
     }
 
+    console.log('🔐 handleLogin: generowanie tokena JWT');
     const token = generateToken(
       { username, role: userData.role },
       env.JWT_SECRET
     );
+    console.log('🔐 handleLogin: token wygenerowany');
 
-    return Response.json({ success: true, token, role: userData.role });
+    const responseBody = { success: true, token, role: userData.role };
+    console.log('🔐 handleLogin: zwracanie odpowiedzi');
+    return Response.json(responseBody, { headers: corsHeaders });
   } catch (error) {
-    return Response.json({ error: 'Błąd serwera' }, { status: 500 });
+    console.error('🔐 handleLogin: WYJĄTEK', error);
+    return Response.json(
+      { success: false, error: `Błąd serwera: ${error.message}` },
+      { status: 500, headers: corsHeaders }
+    );
   }
 }
 
 async function handleAdminLogs(request, env, user) {
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': env.ALLOWED_ORIGINS || '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+  };
+
   if (user.role !== 'admin') {
-    return Response.json({ error: 'Brak uprawnień' }, { status: 403 });
+    return Response.json({ error: 'Brak uprawnień' }, { status: 403, headers: corsHeaders });
   }
 
   try {
@@ -457,15 +496,21 @@ async function handleAdminLogs(request, env, user) {
       if (value) logs.push(value);
     }
     logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    return Response.json({ success: true, logs: logs.slice(0, 100) });
+    return Response.json({ success: true, logs: logs.slice(0, 100) }, { headers: corsHeaders });
   } catch (error) {
-    return Response.json({ error: 'Błąd pobierania logów' }, { status: 500 });
+    return Response.json({ error: 'Błąd pobierania logów' }, { status: 500, headers: corsHeaders });
   }
 }
 
 async function handleAdminUsers(request, env, user) {
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': env.ALLOWED_ORIGINS || '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+  };
+
   if (user.role !== 'admin') {
-    return Response.json({ error: 'Brak uprawnień' }, { status: 403 });
+    return Response.json({ error: 'Brak uprawnień' }, { status: 403, headers: corsHeaders });
   }
   try {
     const list = await env.HS_DATABASE.list({ prefix: 'user:' });
@@ -480,15 +525,15 @@ async function handleAdminUsers(request, env, user) {
         });
       }
     }
-    return Response.json({ success: true, users });
+    return Response.json({ success: true, users }, { headers: corsHeaders });
   } catch (error) {
-    return Response.json({ error: 'Błąd pobierania użytkowników' }, { status: 500 });
+    return Response.json({ error: 'Błąd pobierania użytkowników' }, { status: 500, headers: corsHeaders });
   }
 }
 
-// ------------------------------------------------------------
-// Główny fetch
-// ------------------------------------------------------------
+// ============================================================
+// GŁÓWNA FUNKCJA FETCH
+// ============================================================
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -503,7 +548,25 @@ export default {
     }
 
     // --------------------------------------------------------
-    // Endpointy publiczne
+    // Endpoint logowania (MUSI BYĆ PRZED AUTORYZACJĄ)
+    // --------------------------------------------------------
+    if (url.pathname === '/login' && request.method === 'POST') {
+      // Zwracamy bezpośrednio odpowiedź z handleLogin (która już zawiera nagłówki CORS)
+      return await handleLogin(request, env);
+    }
+
+    // --------------------------------------------------------
+    // Autoryzacja JWT dla pozostałych endpointów
+    // --------------------------------------------------------
+    const authHeader = request.headers.get('Authorization');
+    let user = null;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      user = verifyToken(token, env.JWT_SECRET);
+    }
+
+    // --------------------------------------------------------
+    // Endpointy publiczne (nie wymagają tokena)
     // --------------------------------------------------------
     if (url.pathname === '/health' && request.method === 'GET') {
       try {
@@ -594,10 +657,10 @@ export default {
         }
         
         return Response.json({
-          name: 'HS Code Verifier API v1.4.3',
+          name: 'HS Code Verifier API v1.5.0',
           version: env.VERSION,
-          worker: 'hs-code-verifier-api',
-          url: 'https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev',
+          worker: 'hs-code-verifier-api-auth',
+          url: 'https://hs-code-verifier-api-auth.konto-dla-m-w-q4r.workers.dev',
           database: {
             hasBinding: hasDatabase,
             lastSync: metadata ? metadata.lastSync : 'Nigdy',
@@ -682,24 +745,6 @@ export default {
     }
 
     // --------------------------------------------------------
-    // Endpoint logowania
-    // --------------------------------------------------------
-    if (url.pathname === '/login' && request.method === 'POST') {
-      const result = await handleLogin(request, env);
-      return Response.json(result, { headers: corsHeaders });
-    }
-
-    // --------------------------------------------------------
-    // Autoryzacja JWT
-    // --------------------------------------------------------
-    const authHeader = request.headers.get('Authorization');
-    let user = null;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-      user = verifyToken(token, env.JWT_SECRET);
-    }
-
-    // --------------------------------------------------------
     // /verify – wymaga tokena
     // --------------------------------------------------------
     if (url.pathname === '/verify' && request.method === 'POST') {
@@ -732,12 +777,10 @@ export default {
     // --------------------------------------------------------
     if (user) {
       if (url.pathname === '/admin/logs' && request.method === 'GET') {
-        const result = await handleAdminLogs(request, env, user);
-        return Response.json(result, { headers: corsHeaders });
+        return await handleAdminLogs(request, env, user);
       }
       if (url.pathname === '/admin/users' && request.method === 'GET') {
-        const result = await handleAdminUsers(request, env, user);
-        return Response.json(result, { headers: corsHeaders });
+        return await handleAdminUsers(request, env, user);
       }
     } else {
       if (url.pathname.startsWith('/admin/')) {
@@ -746,7 +789,7 @@ export default {
     }
 
     // --------------------------------------------------------
-    // Endpointy synchronizacji
+    // Endpointy synchronizacji (wymagają własnych kluczy)
     // --------------------------------------------------------
     if (url.pathname === '/cron/sync' && request.method === 'POST') {
       const cronSecret = request.headers.get('X-Cron-Secret');
@@ -793,16 +836,24 @@ export default {
       }
     }
 
+    // --------------------------------------------------------
+    // Domyślna odpowiedź
+    // --------------------------------------------------------
     return Response.json({
       name: 'HS Code Verifier API with Auth',
       version: env.VERSION,
       endpoints: [
         'POST /login',
-        'POST /verify',
+        'POST /verify (wymaga tokena)',
         'GET /health',
         'GET /stats',
+        'GET /sanctions',
+        'GET /controlled',
         'GET /admin/logs (wymaga tokena admin)',
-        'GET /admin/users (wymaga tokena admin)'
+        'GET /admin/users (wymaga tokena admin)',
+        'POST /cron/sync',
+        'POST /api/sync',
+        'GET /api/sync/status'
       ]
     }, { headers: corsHeaders });
   },

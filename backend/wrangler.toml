@@ -18,3 +18,8 @@ id = "d4e909bdc6114613ab76635fadb855b2"  # istniejące KV – to samo
 
 [triggers]
 crons = ["0 3 * * *"]
+
+# 🔥 NOWA SEKCJA – włącza logi i tracing
+[observability]
+enabled = true
+head_sampling_rate = 1.0  # loguj 100% zapytań
