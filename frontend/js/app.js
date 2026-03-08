@@ -1,6 +1,6 @@
 class HSCodeVerifier {
     constructor() {
-        this.apiBaseUrl = 'https://hs-code-verifier-api-auth.konto-dla-m-w-q4r.workers.dev'; // nowy worker z auth
+        this.apiBaseUrl = 'https://hs-code-verifier-api-auth.konto-dla-m-w-q4r.workers.dev';
         this.init();
     }
 
@@ -36,11 +36,8 @@ class HSCodeVerifier {
             this.hsCodeInput.value = '';
             this.result.classList.add('hidden');
             this.extendedCodeInfo.classList.add('hidden');
-            
-            // Ukryj oba ostrzeżenia
             this.sanctionWarningTop.classList.add('hidden');
             this.controlledWarningTop.classList.add('hidden');
-            
             this.hsCodeInput.focus();
         });
         
@@ -54,11 +51,10 @@ class HSCodeVerifier {
         document.getElementById('copyEmailBtn').addEventListener('click', () => this.copyResultForEmail());
     }
 
-    // Nowa metoda do kopiowania wyniku do schowka (dla e-maila)
     copyResultForEmail() {
         const code = document.getElementById('result-code').innerText.trim();
         let description = document.getElementById('result-desc').innerHTML;
-        description = description.replace(/^&nbsp;/, '').trim();  // <-- tutaj usuwamy &nbsp;
+        description = description.replace(/^&nbsp;/, '').trim();
         const status = document.getElementById('result-status').innerText.trim();
 
         const sanctionVisible = !this.sanctionWarningTop.classList.contains('hidden');
@@ -120,7 +116,6 @@ class HSCodeVerifier {
         });
     }
     
-    // Pomocnicza funkcja do określenia koloru statusu
     getStatusColor(status) {
         if (status === 'SANKCJE' || status === 'NIEPOPRAWNY') return '#dc3545';
         if (status === 'SANEPID') return '#2196f3';
@@ -129,7 +124,6 @@ class HSCodeVerifier {
         return '#000000';
     }
     
-    // Usuwa tagi HTML, zostawia czysty tekst (dla wersji plain text)
     stripHtml(html) {
         const div = document.createElement('div');
         div.innerHTML = html;
@@ -237,6 +231,14 @@ class HSCodeVerifier {
                 headers: headers,
                 body: JSON.stringify({ code: code })
             });
+            
+            if (response.status === 401) {
+                localStorage.removeItem('token');
+                localStorage.removeItem('role');
+                window.location.href = 'login.html';
+                return;
+            }
+            
             const data = await response.json();
             this.displayResult(data);
         } catch (error) {
@@ -283,7 +285,6 @@ class HSCodeVerifier {
         }
         statusEl.innerHTML = `&nbsp;${statusText}`;
         
-        // Kolory inline dla statusu
         if (statusEl.className === 'sanctioned' || statusEl.className === 'invalid') {
             statusEl.style.color = '#dc3545';
         } else if (statusEl.className === 'controlled-status') {
@@ -301,7 +302,6 @@ class HSCodeVerifier {
             this.extendedCodeInfo.classList.add('hidden');
         }
         
-        // Obsługa ostrzeżeń
         if (data.sanctioned) {
             this.sanctionWarningTop.classList.remove('hidden');
             if (data.sanctionMessage) {
@@ -338,7 +338,6 @@ class HSCodeVerifier {
     }
 }
 
-// Inicjalizacja po załadowaniu DOM
 document.addEventListener('DOMContentLoaded', () => {
     new HSCodeVerifier();
 });

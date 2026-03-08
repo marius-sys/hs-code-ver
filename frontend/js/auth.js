@@ -1,5 +1,4 @@
-// auth.js – obsługa logowania i zarządzanie tokenem
-const API_BASE_URL = 'https://hs-code-verifier-api-auth.konto-dla-m-w-q4r.workers.dev';// docelowo zmienić po deployu
+const API_BASE_URL = 'https://hs-code-verifier-api-auth.konto-dla-m-w-q4r.workers.dev';
 
 document.addEventListener('DOMContentLoaded', () => {
     const loginForm = document.getElementById('loginForm');
@@ -32,7 +31,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Obsługa wylogowania
     const logoutBtn = document.getElementById('logoutBtn');
     if (logoutBtn) {
         logoutBtn.addEventListener('click', () => {
@@ -42,17 +40,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Sprawdzenie czy token istnieje (dla stron chronionych)
+    // Przekierowanie, jeśli brak tokena i nie jesteśmy na stronie logowania
     const token = localStorage.getItem('token');
     const currentPath = window.location.pathname;
-    if (currentPath.includes('admin.html') || currentPath.includes('index.html')) {
-        if (!token) {
-            window.location.href = 'login.html';
-        } else {
-            // Wyświetl nazwę użytkownika z tokena (można dekodować JWT)
+    
+    if (!token && !currentPath.includes('login.html')) {
+        window.location.href = 'login.html';
+    } else if (token) {
+        try {
             const payload = JSON.parse(atob(token.split('.')[1]));
             const userSpan = document.getElementById('loggedUser');
             if (userSpan) userSpan.textContent = payload.username;
+        } catch (e) {
+            console.error('Błąd dekodowania tokena', e);
         }
     }
 });
