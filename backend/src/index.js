@@ -1,5 +1,5 @@
+import { sign, verify } from 'jsonwebtoken';
 import { syncIsztarData } from './sync.js';
-import { sign, verify } from 'jsonwebtoken';  // nowy import
 
 const RATE_LIMIT = {
   maxRequests: 20000,
@@ -13,7 +13,7 @@ let cacheTimestamp = 0;
 const CACHE_TTL = 5 * 60 * 1000;
 
 // ------------------------------------------------------------
-// NOWE FUNKCJE POMOCNICZE – JWT, hashowanie, logowanie
+// Funkcje pomocnicze JWT
 // ------------------------------------------------------------
 function generateToken(payload, secret, expiresIn = '7d') {
   return sign(payload, secret, { expiresIn });
@@ -27,6 +27,9 @@ function verifyToken(token, secret) {
   }
 }
 
+// ------------------------------------------------------------
+// Hashowanie hasła (HMAC-SHA256)
+// ------------------------------------------------------------
 async function hashPassword(password, salt) {
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
@@ -43,6 +46,9 @@ async function hashPassword(password, salt) {
     .replace(/\//g, '_');
 }
 
+// ------------------------------------------------------------
+// Logowanie zapytań do KV
+// ------------------------------------------------------------
 async function logQuery(env, userId, code, ip) {
   try {
     const timestamp = Date.now();
@@ -54,13 +60,14 @@ async function logQuery(env, userId, code, ip) {
       timestamp: new Date().toISOString()
     };
     await env.HS_DATABASE.put(key, JSON.stringify(logEntry));
+    // Opcjonalnie: usuń stare logi (np. starsze niż 30 dni)
   } catch (error) {
     console.error('Błąd logowania:', error);
   }
 }
 
 // ------------------------------------------------------------
-// ISTNIEJĄCE FUNKCJE (bez zmian)
+// Istniejące funkcje z wersji 1.4.3
 // ------------------------------------------------------------
 function checkRateLimit(ip) {
   const today = new Date().toISOString().split('T')[0];
@@ -188,21 +195,17 @@ function normalizeHSCode(code) {
   
   if (cleaned.length === 10 && cleaned.endsWith('0')) {
     let normalized = cleaned.replace(/0+$/, '');
-    
     if (normalized.length < 4) {
       normalized = cleaned.substring(0, 4);
     }
-    
     return normalized;
   }
   
   if (cleaned.length > 4 && cleaned.endsWith('0')) {
     let normalized = cleaned.replace(/0+$/, '');
-    
     if (normalized.length < 4) {
       normalized = cleaned.substring(0, 4);
     }
-    
     return normalized;
   }
   
@@ -411,7 +414,7 @@ async function handleCron(env, ctx) {
 }
 
 // ------------------------------------------------------------
-// NOWE ENDPOINTY – logowanie, panel admina
+// Endpointy logowania i admina
 // ------------------------------------------------------------
 async function handleLogin(request, env) {
   try {
@@ -484,7 +487,7 @@ async function handleAdminUsers(request, env, user) {
 }
 
 // ------------------------------------------------------------
-// GŁÓWNY OBSŁUGIWACZ FETCH
+// Główny fetch
 // ------------------------------------------------------------
 export default {
   async fetch(request, env, ctx) {
@@ -499,36 +502,10 @@ export default {
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
     }
-
+    
     // --------------------------------------------------------
-    // NOWY ENDPOINT: logowanie (publiczne)
+    // Endpointy publiczne
     // --------------------------------------------------------
-    if (url.pathname === '/login' && request.method === 'POST') {
-      const result = await handleLogin(request, env);
-      return Response.json(result, { headers: corsHeaders });
-    }
-
-    // --------------------------------------------------------
-    // ENDPOINTY PUBLICZNE (bez zmian)
-    // --------------------------------------------------------
-    if (url.pathname === '/cron/sync' && request.method === 'POST') {
-      const cronSecret = request.headers.get('X-Cron-Secret');
-      if (!env.CRON_SECRET || cronSecret !== env.CRON_SECRET) {
-        return new Response('Unauthorized', { 
-          status: 401,
-          headers: corsHeaders 
-        });
-      }
-      
-      ctx.waitUntil(handleCron(env, ctx));
-      
-      return Response.json({
-        success: true,
-        message: 'Synchronizacja CRON uruchomiona',
-        timestamp: new Date().toISOString()
-      }, { headers: corsHeaders });
-    }
-
     if (url.pathname === '/health' && request.method === 'GET') {
       try {
         const hasDatabase = !!env.HS_DATABASE;
@@ -584,7 +561,7 @@ export default {
         }, { status: 500, headers: corsHeaders });
       }
     }
-
+    
     if (url.pathname === '/stats' && request.method === 'GET') {
       try {
         const hasDatabase = !!env.HS_DATABASE;
@@ -618,7 +595,7 @@ export default {
         }
         
         return Response.json({
-          name: 'HS Code Verifier API v1.5.0',
+          name: 'HS Code Verifier API with Auth v1.5.0',
           version: env.VERSION,
           worker: 'hs-code-verifier-api-auth',
           url: 'https://hs-code-verifier-api-auth.workers.dev',
@@ -649,7 +626,7 @@ export default {
         );
       }
     }
-
+    
     if (url.pathname === '/sanctions' && request.method === 'GET') {
       try {
         const hasDatabase = !!env.HS_DATABASE;
@@ -676,52 +653,7 @@ export default {
         );
       }
     }
-
-    if (url.pathname === '/sanctions/update' && request.method === 'POST') {
-      const authToken = request.headers.get('Authorization');
-      if (!env.SYNC_TOKEN || authToken !== `Bearer ${env.SYNC_TOKEN}`) {
-        return Response.json(
-          { error: 'Brak autoryzacji' },
-          { status: 401, headers: corsHeaders }
-        );
-      }
-      
-      try {
-        const body = await request.json();
-        const { codes } = body;
-        
-        if (!codes || !Array.isArray(codes)) {
-          return Response.json(
-            { error: 'Nieprawidłowy format danych. Oczekiwano tablicy "codes"' },
-            { status: 400, headers: corsHeaders }
-          );
-        }
-        
-        const validCodes = codes.filter(code => /^\d{4}$/.test(code));
-        
-        const data = {
-          codes: validCodes,
-          lastUpdated: new Date().toISOString(),
-          totalCodes: validCodes.length,
-          version: '1.0'
-        };
-        
-        await env.HS_DATABASE.put('HS_SANCTIONED_CODES', JSON.stringify(data));
-        
-        return Response.json({
-          success: true,
-          message: `Zaktualizowano ${validCodes.length} kodów sankcyjnych`,
-          data: data
-        }, { headers: corsHeaders });
-        
-      } catch (error) {
-        return Response.json(
-          { error: 'Nieprawidłowy format danych', details: error.message },
-          { status: 400, headers: corsHeaders }
-        );
-      }
-    }
-
+    
     if (url.pathname === '/controlled' && request.method === 'GET') {
       try {
         const hasDatabase = !!env.HS_DATABASE;
@@ -749,109 +681,17 @@ export default {
         );
       }
     }
-
-    if (url.pathname === '/controlled/update' && request.method === 'POST') {
-      const authToken = request.headers.get('Authorization');
-      if (!env.SYNC_TOKEN || authToken !== `Bearer ${env.SYNC_TOKEN}`) {
-        return Response.json(
-          { error: 'Brak autoryzacji' },
-          { status: 401, headers: corsHeaders }
-        );
-      }
-      
-      try {
-        const body = await request.json();
-        const { codes } = body;
-        
-        if (!codes || !Array.isArray(codes)) {
-          return Response.json(
-            { error: 'Nieprawidłowy format danych. Oczekiwano tablicy "codes"' },
-            { status: 400, headers: corsHeaders }
-          );
-        }
-        
-        const validCodes = codes.filter(code => /^\d{4}$/.test(code));
-        
-        const data = {
-          codes: validCodes,
-          lastUpdated: new Date().toISOString(),
-          totalCodes: validCodes.length,
-          version: '1.0',
-          listType: 'sanepid_control'
-        };
-        
-        await env.HS_DATABASE.put('HS_CONTROLLED_CODES', JSON.stringify(data));
-        
-        return Response.json({
-          success: true,
-          message: `Zaktualizowano ${validCodes.length} kodów pod kontrolą SANEPID`,
-          data: data
-        }, { headers: corsHeaders });
-        
-      } catch (error) {
-        return Response.json(
-          { error: 'Nieprawidłowy format danych', details: error.message },
-          { status: 400, headers: corsHeaders }
-        );
-      }
+    
+    // --------------------------------------------------------
+    // Endpoint logowania (publiczny)
+    // --------------------------------------------------------
+    if (url.pathname === '/login' && request.method === 'POST') {
+      const result = await handleLogin(request, env);
+      return Response.json(result, { headers: corsHeaders });
     }
-
+    
     // --------------------------------------------------------
-    // ENDPOINT WERYFIKACJI – z logowaniem (jeśli użytkownik zalogowany)
-    // --------------------------------------------------------
-    if (url.pathname === '/verify' && request.method === 'POST') {
-      const clientIP = getClientIP(request);
-      if (!checkRateLimit(clientIP)) {
-        return Response.json(
-          { error: RATE_LIMIT.message },
-          { status: 429, headers: corsHeaders }
-        );
-      }
-      
-      try {
-        const body = await request.json();
-        const { code } = body;
-        
-        if (!code) {
-          return Response.json(
-            { error: 'Brak kodu HS' },
-            { status: 400, headers: corsHeaders }
-          );
-        }
-        
-        if (!env.HS_DATABASE) {
-          return Response.json({
-            success: false,
-            code: code,
-            description: 'Baza danych niedostępna',
-            error: 'DATABASE_UNAVAILABLE'
-          }, { headers: corsHeaders });
-        }
-        
-        const result = await verifyHSCode(code, env);
-
-        // Sprawdź token i zaloguj jeśli użytkownik istnieje
-        const authHeader = request.headers.get('Authorization');
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-          const token = authHeader.substring(7);
-          const user = verifyToken(token, env.JWT_SECRET);
-          if (user) {
-            ctx.waitUntil(logQuery(env, user.username, code, clientIP));
-          }
-        }
-        
-        return Response.json(result, { headers: corsHeaders });
-        
-      } catch (error) {
-        return Response.json(
-          { error: 'Nieprawidłowy format danych' },
-          { status: 400, headers: corsHeaders }
-        );
-      }
-    }
-
-    // --------------------------------------------------------
-    // ENDPOINTY ADMINA (wymagają tokena i roli admin)
+    // Endpointy wymagające autoryzacji (JWT)
     // --------------------------------------------------------
     const authHeader = request.headers.get('Authorization');
     let user = null;
@@ -859,26 +699,74 @@ export default {
       const token = authHeader.substring(7);
       user = verifyToken(token, env.JWT_SECRET);
     }
-
-    if (url.pathname === '/admin/logs' && request.method === 'GET') {
-      if (!user) {
+    
+    if (url.pathname === '/verify' && request.method === 'POST') {
+      const clientIP = getClientIP(request);
+      if (!checkRateLimit(clientIP)) {
+        return Response.json({ error: RATE_LIMIT.message }, { status: 429, headers: corsHeaders });
+      }
+      
+      try {
+        const body = await request.json();
+        const { code } = body;
+        
+        if (!code) {
+          return Response.json({ error: 'Brak kodu HS' }, { status: 400, headers: corsHeaders });
+        }
+        
+        const result = await verifyHSCode(code, env);
+        
+        // Jeśli user jest zalogowany, zapisz log
+        if (user) {
+          ctx.waitUntil(logQuery(env, user.username, code, clientIP));
+        }
+        
+        return Response.json(result, { headers: corsHeaders });
+      } catch (error) {
+        return Response.json({ error: 'Nieprawidłowy format danych' }, { status: 400, headers: corsHeaders });
+      }
+    }
+    
+    // --------------------------------------------------------
+    // Endpointy admina (wymagają tokena i roli admin)
+    // --------------------------------------------------------
+    if (user) {
+      if (url.pathname === '/admin/logs' && request.method === 'GET') {
+        const result = await handleAdminLogs(request, env, user);
+        return Response.json(result, { headers: corsHeaders });
+      }
+      if (url.pathname === '/admin/users' && request.method === 'GET') {
+        const result = await handleAdminUsers(request, env, user);
+        return Response.json(result, { headers: corsHeaders });
+      }
+    } else {
+      // Jeśli endpoint wymaga autoryzacji, a jej brak
+      if (url.pathname.startsWith('/admin/')) {
         return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
       }
-      const result = await handleAdminLogs(request, env, user);
-      return Response.json(result, { headers: corsHeaders });
     }
-
-    if (url.pathname === '/admin/users' && request.method === 'GET') {
-      if (!user) {
-        return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
+    
+    // --------------------------------------------------------
+    // Endpoint synchronizacji (jak wcześniej)
+    // --------------------------------------------------------
+    if (url.pathname === '/cron/sync' && request.method === 'POST') {
+      const cronSecret = request.headers.get('X-Cron-Secret');
+      if (!env.CRON_SECRET || cronSecret !== env.CRON_SECRET) {
+        return new Response('Unauthorized', { 
+          status: 401,
+          headers: corsHeaders 
+        });
       }
-      const result = await handleAdminUsers(request, env, user);
-      return Response.json(result, { headers: corsHeaders });
+      
+      ctx.waitUntil(handleCron(env, ctx));
+      
+      return Response.json({
+        success: true,
+        message: 'Synchronizacja CRON uruchomiona',
+        timestamp: new Date().toISOString()
+      }, { headers: corsHeaders });
     }
-
-    // --------------------------------------------------------
-    // ENDPOINTY SYNCHRONIZACJI (pozostałe)
-    // --------------------------------------------------------
+    
     if (url.pathname === '/api/sync' && request.method === 'POST') {
       const authToken = request.headers.get('Authorization');
       const expectedToken = env.SYNC_TOKEN;
@@ -901,7 +789,7 @@ export default {
         { headers: corsHeaders }
       );
     }
-
+    
     if (url.pathname === '/api/sync/status' && request.method === 'GET') {
       try {
         const metadata = await env.HS_DATABASE.get('HS_METADATA', 'json');
@@ -926,25 +814,21 @@ export default {
         );
       }
     }
-
+    
     // Domyślna odpowiedź
     return Response.json({
-      name: 'HS Code Verifier API v1.5.0 with Auth',
+      name: 'HS Code Verifier API with Auth v1.5.0',
       version: env.VERSION,
       description: 'System weryfikacji kodów celnych HS z bazą ISZTAR',
       worker: 'hs-code-verifier-api-auth',
       url: 'https://hs-code-verifier-api-auth.workers.dev',
       endpoints: [
-        'POST /login - logowanie użytkownika',
-        'POST /verify - weryfikacja kodu HS (logowana jeśli token podany)',
-        'GET /health - status zdrowia systemu',
-        'GET /stats - statystyki bazy',
-        'GET /admin/logs - lista logów (admin)',
-        'GET /admin/users - lista użytkowników (admin)',
-        'GET /sanctions - lista kodów sankcyjnych',
-        'POST /sanctions/update - aktualizacja sankcji (token)',
-        'GET /controlled - lista kodów SANEPID',
-        'POST /controlled/update - aktualizacja SANEPID (token)'
+        'POST /login',
+        'POST /verify',
+        'GET /health',
+        'GET /stats',
+        'GET /admin/logs (wymaga tokena admin)',
+        'GET /admin/users (wymaga tokena admin)'
       ],
       timestamp: new Date().toISOString()
     }, { headers: corsHeaders });
