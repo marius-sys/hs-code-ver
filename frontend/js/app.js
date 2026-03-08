@@ -1,6 +1,6 @@
 class HSCodeVerifier {
     constructor() {
-        this.apiBaseUrl = 'hs-code-verifier-api-auth.workers.dev'; // nowy worker z auth
+        this.apiBaseUrl = 'https://hs-code-verifier-api-auth.workers.dev'; // nowy worker z auth
         this.init();
     }
 

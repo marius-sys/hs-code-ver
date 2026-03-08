@@ -1,3 +1,4 @@
+const API_BASE_URL = 'https://hs-code-verifier-api-auth.workers.dev';
 // admin.js – ładowanie logów
 document.addEventListener('DOMContentLoaded', async () => {
     const token = localStorage.getItem('token');
