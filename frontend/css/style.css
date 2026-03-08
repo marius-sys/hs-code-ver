@@ -37,12 +37,13 @@ body {
     border-top: 6px solid var(--q4r-accent);
 }
 
+/* ===== HEADER ===== */
 .header {
+    position: relative;
     background: linear-gradient(135deg, var(--q4r-primary) 0%, #1a3a7a 100%);
     color: white;
     padding: 2.8rem 2.5rem;
     text-align: center;
-    position: relative;
 }
 
 .header::after {
@@ -55,12 +56,13 @@ body {
     background: var(--q4r-accent);
 }
 
+/* Logo zawsze wyśrodkowane */
 .logo {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 18px;
-    margin-bottom: 1.2rem;
+    margin: 0 auto;
 }
 
 .logo-image {
@@ -74,6 +76,7 @@ body {
     font-weight: 700;
     letter-spacing: -0.5px;
     text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    margin: 0;
 }
 
 .subtitle {
@@ -109,6 +112,42 @@ body {
     font-size: 1.2rem;
 }
 
+/* Panel użytkownika (prawy górny róg na desktopie) */
+.user-info {
+    position: absolute;
+    right: 2rem;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    color: white;
+}
+
+.btn-logout, .btn-admin, .btn-home {
+    background: rgba(255,255,255,0.2);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.3s;
+    font-size: 0.9rem;
+    text-decoration: none;
+}
+
+.btn-logout:hover, .btn-admin:hover, .btn-home:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+.btn-admin {
+    background: rgba(255,255,255,0.15);
+}
+
+/* ===== MAIN ===== */
 .main {
     padding: 2.8rem;
 }
@@ -271,7 +310,6 @@ button {
     border: 1px solid rgba(21, 42, 94, 0.3);
 }
 
-/* Dodaj nowe style dla statusów */
 .sanctioned {
     background: rgba(220, 53, 69, 0.15);
     color: var(--q4r-sanctioned);
@@ -343,7 +381,7 @@ input::placeholder {
     font-size: 1rem;
 }
 
-/* Styl dla ostrzeżenia sankcyjnego - POMARAŃCZOWY/CZERWONY */
+/* Ostrzeżenia */
 .sanction-warning-top {
     background: linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%);
     color: #856404;
@@ -371,7 +409,6 @@ input::placeholder {
     100% { box-shadow: 0 5px 15px rgba(255, 193, 7, 0.2); }
 }
 
-/* Styl dla ostrzeżenia kontroli SANEPID - NIEBIESKI */
 .controlled-warning-top {
     background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
     color: #1565c0;
@@ -407,11 +444,11 @@ input::placeholder {
 #result-desc strong {
     color: var(--q4r-primary);
     font-weight: 700;
-    /* Resetujemy min-width dla strong wewnątrz opisu */
     min-width: auto;
     white-space: normal;
 }
 
+/* Karty informacyjne */
 .info-cards {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -457,6 +494,7 @@ input::placeholder {
     line-height: 1.5;
 }
 
+/* Footer */
 .footer {
     background: var(--q4r-primary);
     color: white;
@@ -487,54 +525,64 @@ input::placeholder {
     border-top: 1px solid rgba(255,255,255,0.1);
 }
 
-/* Responsywność */
+/* ===== RESPONSYWNOŚĆ ===== */
 @media (max-width: 768px) {
-    .container {
-        margin: 1rem auto;
-        border-radius: 12px;
-    }
-    
     .header {
         padding: 2rem 1.5rem;
     }
-    
+
+    .logo {
+        display: flex; /* powrót do flex, aby elementy były obok siebie */
+        margin: 0 auto 0.5rem auto; /* wyśrodkowanie i odstęp pod spodem */
+    }
+
     .logo h1 {
         font-size: 2rem;
     }
-    
+
     .logo-image {
         height: 50px;
     }
-    
+
     .subtitle {
         font-size: 1.1rem;
     }
-    
+
     .main {
         padding: 1.8rem;
     }
-    
+
     .input-group {
         flex-direction: column;
     }
-    
+
     button {
         width: 100%;
         justify-content: center;
     }
-    
+
     .info-cards {
         grid-template-columns: 1fr;
         gap: 20px;
     }
-    
+
     .format-info {
         flex-wrap: wrap;
         text-align: center;
         padding: 12px;
     }
+
+    /* Na małych ekranach user-info wraca pod logo */
+    .user-info {
+        position: static;
+        transform: none;
+        margin-top: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
 }
-/* Styl dla logowania */
+
+/* Strona logowania (nie wymaga osobnej klasy, bo układ jest uniwersalny) */
 .login-body {
     background: linear-gradient(135deg, #152a5e 0%, #1a3a7a 100%);
     display: flex;
@@ -575,88 +623,7 @@ input::placeholder {
     color: #666;
 }
 
-.input-group {
-    display: flex;
-    align-items: center;
-    margin-bottom: 20px;
-    border: 2px solid #e1e5eb;
-    border-radius: 10px;
-    overflow: hidden;
-}
-
-.input-group i {
-    width: 50px;
-    text-align: center;
-    color: #152a5e;
-    font-size: 1.2rem;
-}
-
-.input-group input {
-    flex: 1;
-    border: none;
-    padding: 15px 15px 15px 0;
-    font-size: 1rem;
-}
-
-.input-group input:focus {
-    outline: none;
-}
-
-.error-message {
-    color: #dc3545;
-    margin-top: 15px;
-    text-align: center;
-    padding: 10px;
-    background: #f8d7da;
-    border-radius: 8px;
-}
-
-/* Panel admina */
-.user-info {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 20px;
-    margin-top: 20px;
-    color: white;
-}
-
-.btn-logout {
-    background: rgba(255,255,255,0.2);
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 8px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    transition: background 0.3s;
-}
-
-.btn-logout:hover {
-    background: rgba(255,255,255,0.3);
-}
-
-.btn-home {
-    background: rgba(255,255,255,0.2);
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 8px;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    transition: background 0.3s;
-    font-size: 0.9rem;
-    text-decoration: none;
-}
-
-.btn-home:hover {
-    background: rgba(255,255,255,0.3);
-}
-
+/* Tabela logów w adminie */
 .logs-table {
     width: 100%;
     border-collapse: collapse;
@@ -677,63 +644,4 @@ input::placeholder {
 
 .logs-table tr:hover {
     background: #f5f7fa;
-}
-/* Poprawiony header – flexbox */
-.header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1rem 2rem;
-    background: linear-gradient(135deg, var(--q4r-primary) 0%, #1a3a7a 100%);
-    color: white;
-    flex-wrap: wrap;
-}
-
-.logo {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.logo h1 {
-    font-size: 1.8rem;
-    margin: 0;
-}
-
-.user-info {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    color: white;
-    margin-left: auto;
-    flex-wrap: wrap;
-}
-
-.btn-logout, .btn-admin {
-    background: rgba(255,255,255,0.2);
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 8px;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    transition: background 0.3s;
-    font-size: 0.9rem;
-    text-decoration: none;
-}
-
-.btn-logout:hover, .btn-admin:hover {
-    background: rgba(255,255,255,0.3);
-}
-
-.btn-admin {
-    background: rgba(255,255,255,0.15);
-}
-
-/* Strona logowania – karta węższa */
-.card {
-    max-width: 100%;
-    margin: 0 auto;
 }
