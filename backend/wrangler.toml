@@ -10,7 +10,7 @@ workers_dev = true
 ENVIRONMENT = "production"
 VERSION = "1.5.0"
 MAX_REQUESTS_PER_DAY = 20000
-ALLOWED_ORIGINS = "https://hs-code-auth.pages.dev"  # docelowy URL Cloudflare Pages
+ALLOWED_ORIGINS = "https://hs-code-ver.pages.dev"  # docelowy URL Cloudflare Pages
 
 [[kv_namespaces]]
 binding = "HS_DATABASE"
