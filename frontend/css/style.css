@@ -659,3 +659,62 @@ input::placeholder {
 .logs-table tr:hover {
     background: #f5f7fa;
 }
+/* Poprawiony header – flexbox */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 2rem;
+    background: linear-gradient(135deg, var(--q4r-primary) 0%, #1a3a7a 100%);
+    color: white;
+    flex-wrap: wrap;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.logo h1 {
+    font-size: 1.8rem;
+    margin: 0;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    color: white;
+    margin-left: auto;
+    flex-wrap: wrap;
+}
+
+.btn-logout, .btn-admin {
+    background: rgba(255,255,255,0.2);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.3s;
+    font-size: 0.9rem;
+    text-decoration: none;
+}
+
+.btn-logout:hover, .btn-admin:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+.btn-admin {
+    background: rgba(255,255,255,0.15);
+}
+
+/* Strona logowania – karta węższa */
+.card {
+    max-width: 100%;
+    margin: 0 auto;
+}

@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (data.success) {
                     localStorage.setItem('token', data.token);
                     localStorage.setItem('role', data.role);
-                    window.location.href = '/'; // Przekierowanie na stronę główną
+                    window.location.href = '/';
                 } else {
                     errorDiv.textContent = data.error || 'Błąd logowania';
                     errorDiv.classList.remove('hidden');
@@ -31,15 +31,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const logoutBtn = document.getElementById('logoutBtn');
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', () => {
-            localStorage.removeItem('token');
-            localStorage.removeItem('role');
-            window.location.href = '/login';
-        });
-    }
-
     // Sprawdzenie tokena – jeśli brak i nie jesteśmy na stronie logowania, przekieruj
     const token = localStorage.getItem('token');
     const currentPath = window.location.pathname;
@@ -47,12 +38,37 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!token && currentPath !== '/login') {
         window.location.href = '/login';
     } else if (token) {
-        try {
-            const payload = JSON.parse(atob(token.split('.')[1]));
-            const userSpan = document.getElementById('loggedUser');
-            if (userSpan) userSpan.textContent = payload.username;
-        } catch (e) {
-            console.error('Błąd dekodowania tokena', e);
+        // Wyświetl elementy userInfo na stronach, gdzie istnieją
+        const userInfo = document.getElementById('userInfo');
+        const loggedUserSpan = document.getElementById('loggedUser');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const adminPanelBtn = document.getElementById('adminPanelBtn');
+
+        if (userInfo) userInfo.style.display = 'flex';
+        
+        if (loggedUserSpan) {
+            try {
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                loggedUserSpan.textContent = payload.username;
+                
+                // Pokaż przycisk panelu admina tylko dla roli admin
+                if (adminPanelBtn && payload.role === 'admin') {
+                    adminPanelBtn.style.display = 'inline-flex';
+                    adminPanelBtn.addEventListener('click', () => {
+                        window.location.href = '/admin';
+                    });
+                }
+            } catch (e) {
+                console.error('Błąd dekodowania tokena', e);
+            }
+        }
+
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', () => {
+                localStorage.removeItem('token');
+                localStorage.removeItem('role');
+                window.location.href = '/login';
+            });
         }
     }
 });

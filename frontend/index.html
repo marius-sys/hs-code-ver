@@ -1,11 +1,6 @@
 <!DOCTYPE html>
 <html lang="pl">
 <head>
-    <script>
-        if (!localStorage.getItem('token') && window.location.pathname !== '/login') {
-            window.location.href = '/login';
-        }
-    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Q4Rail - Weryfikator Kodów Celnych HS</title>
@@ -25,14 +20,19 @@
                 <img src="logo.svg" alt="Q4Rail Logo" class="logo-image">
                 <h1>HS CODE VERIFIER</h1>
             </div>
-            <p class="subtitle">Profesjonalna weryfikacja kodów celnych dla logistyki międzynarodowej</p>
-            <p class="format-info">
-                <i class="fas fa-info-circle"></i>
-                Akceptowane formaty: 1234, 1234 56, 1234-56-78, 1234567890
-            </p>
+            <div class="user-info" id="userInfo" style="display: none;">
+                <span>Zalogowany jako: <span id="loggedUser"></span></span>
+                <button id="adminPanelBtn" class="btn-admin" style="display: none;">
+                    <i class="fas fa-cog"></i> Panel admina
+                </button>
+                <button id="logoutBtn" class="btn-logout">
+                    <i class="fas fa-sign-out-alt"></i> Wyloguj
+                </button>
+            </div>
         </header>
 
         <main class="main">
+            <!-- reszta strony bez zmian – cała zawartość, którą już masz -->
             <div class="card">
                 <h2><i class="fas fa-barcode"></i> Wprowadź kod HS</h2>
                 <div class="input-group">
@@ -58,7 +58,6 @@
             <div id="result" class="card hidden">
                 <h2><i class="fas fa-clipboard-check"></i> Wynik weryfikacji</h2>
                 
-                <!-- Ostrzeżenie sankcyjne na górze -->
                 <div id="sanction-warning-top" class="sanction-warning-top hidden">
                     <i class="fas fa-exclamation-triangle"></i>
                     <div>
@@ -69,7 +68,6 @@
                     </div>
                 </div>
                 
-                <!-- Ostrzeżenie kontroli SANEPID na górze -->
                 <div id="controlled-warning-top" class="controlled-warning-top hidden">
                     <i class="fas fa-clipboard-check"></i>
                     <div>
@@ -130,7 +128,7 @@
         </main>
 
         <footer class="footer">
-            <p><strong>Q4Rail Sp. z o.o.</strong> &copy; 2026 | Weryfikator Kodów HS v1.4.3</p>
+            <p><strong>Q4Rail Sp. z o.o.</strong> &copy; 2026 | Weryfikator Kodów HS v1.5.0</p>
             <p>Domena: <a href="https://hs-code.q4rail.com" style="color: #90ee90; text-decoration: none;">hs-code.q4rail.com</a></p>
             <p>Status systemu: <span id="api-status">Sprawdzanie połączenia...</span></p>
             <p class="version">
