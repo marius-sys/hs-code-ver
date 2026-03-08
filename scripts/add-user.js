@@ -1,38 +1,29 @@
 #!/usr/bin/env node
-import fetch from 'node-fetch';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { writeFileSync, unlinkSync } from 'fs';
+import { createHmac } from 'crypto';
 
 const execAsync = promisify(exec);
-const API_BASE = 'https://hs-code-verifier-api-auth.workers.dev';
+const KV_ID = 'd4e909bdc6114613ab76635fadb855b2';
 
-async function hashPassword(password, salt) {
-    // Używamy tego samego algorytmu co w workerze
-    const encoder = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-        'raw',
-        encoder.encode(salt),
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign']
-    );
-    const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(password));
-    return btoa(String.fromCharCode(...new Uint8Array(signature)))
+function hashPassword(password, salt) {
+    const hmac = createHmac('sha256', salt);
+    hmac.update(password);
+    return hmac.digest('base64')
         .replace(/=/g, '')
         .replace(/\+/g, '-')
         .replace(/\//g, '_');
 }
 
 async function addUser(username, password, role = 'user') {
-    const kvId = 'd4e909bdc6114613ab76635fadb855b2'; // to samo KV
-    const salt = process.env.JWT_SECRET; // musisz mieć ustawione JWT_SECRET w środowisku
+    const salt = process.env.JWT_SECRET;
     if (!salt) {
-        console.error('Brak JWT_SECRET w środowisku!');
+        console.error('❌ Brak JWT_SECRET w środowisku!');
         process.exit(1);
     }
 
-    const hash = await hashPassword(password, salt + username);
+    const hash = hashPassword(password, salt + username);
     const userData = JSON.stringify({
         passwordHash: hash,
         role,
@@ -42,19 +33,19 @@ async function addUser(username, password, role = 'user') {
     const tmpFile = `/tmp/user_${username}.json`;
     writeFileSync(tmpFile, userData);
 
-    const cmd = `npx wrangler kv key put --namespace-id=${kvId} "user:${username}" --path ${tmpFile} --remote`;
+    const cmd = `npx wrangler kv key put --namespace-id=${KV_ID} "user:${username}" --path ${tmpFile} --remote`;
     try {
-        const { stdout, stderr } = await execAsync(cmd);
-        console.log(`Użytkownik ${username} dodany.`);
-        if (stderr) console.error(stderr);
+        const { stdout, stderr } = await execAsync(cmd, { env: process.env });
+        console.log(`✅ Użytkownik ${username} dodany.`);
+        if (stderr) console.error('⚠️ Stderr:', stderr);
+        if (stdout) console.log('ℹ️', stdout);
     } catch (error) {
-        console.error('Błąd:', error);
+        console.error('❌ Błąd:', error);
     } finally {
         unlinkSync(tmpFile);
     }
 }
 
-// Obsługa argumentów wiersza poleceń
 const args = process.argv.slice(2);
 if (args.length < 2) {
     console.log('Użycie: node scripts/add-user.js <username> <password> [role]');
