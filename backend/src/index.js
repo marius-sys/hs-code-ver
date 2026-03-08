@@ -1,15 +1,3 @@
-if (url.pathname === '/login' && request.method === 'POST') {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-  };
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { headers });
-  }
-  // Prosta odpowiedź testowa
-  return Response.json({ message: 'Login endpoint works' }, { headers });
-}
 import bcrypt from 'bcryptjs';
 
 const RATE_LIMIT = {
@@ -366,6 +354,7 @@ async function getLastSyncDate(env) {
 
 async function handleCron(env, ctx) {
   console.log('🔄 Uruchomienie zaplanowanej synchronizacji CRON');
+  // UWAGA: zakładam, że w pliku sync.js jest funkcja syncIsztarData
   const { syncIsztarData } = await import('./sync.js');
   const result = await syncIsztarData(env, ctx);
   

@@ -10,7 +10,7 @@ workers_dev = true
 ENVIRONMENT = "production"
 VERSION = "1.4.3"
 MAX_REQUESTS_PER_DAY = 20000
-ALLOWED_ORIGINS = "https://hs-code-ver.pages.dev https://hs-code.q4rail.com"
+ALLOWED_ORIGINS = "https://hs-code.q4rail.com https://hs-code-ver.pages.dev"
 
 [[kv_namespaces]]
 binding = "HS_DATABASE"
