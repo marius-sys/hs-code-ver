@@ -235,7 +235,7 @@ class HSCodeVerifier {
             if (response.status === 401) {
                 localStorage.removeItem('token');
                 localStorage.removeItem('role');
-                window.location.href = 'login.html';
+                window.location.href = '/login';
                 return;
             }
             

@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (data.success) {
                     localStorage.setItem('token', data.token);
                     localStorage.setItem('role', data.role);
-                    window.location.href = 'index.html';
+                    window.location.href = '/'; // Przekierowanie na stronę główną
                 } else {
                     errorDiv.textContent = data.error || 'Błąd logowania';
                     errorDiv.classList.remove('hidden');
@@ -36,16 +36,16 @@ document.addEventListener('DOMContentLoaded', () => {
         logoutBtn.addEventListener('click', () => {
             localStorage.removeItem('token');
             localStorage.removeItem('role');
-            window.location.href = 'login.html';
+            window.location.href = '/login';
         });
     }
 
-    // Przekierowanie, jeśli brak tokena i nie jesteśmy na stronie logowania
+    // Sprawdzenie tokena – jeśli brak i nie jesteśmy na stronie logowania, przekieruj
     const token = localStorage.getItem('token');
     const currentPath = window.location.pathname;
     
-    if (!token && !currentPath.includes('login.html')) {
-        window.location.href = 'login.html';
+    if (!token && currentPath !== '/login') {
+        window.location.href = '/login';
     } else if (token) {
         try {
             const payload = JSON.parse(atob(token.split('.')[1]));
