@@ -36,7 +36,8 @@
     "verify": "echo 'Użyj: npm run verify -- --code=0101'",
     "test": "npm run test-sync && npm run test-isztar",
     "setup-kv": "node scripts/setup-kv.js",
-    "full-deploy": "npm run delta-sync && npm run deploy"
+    "full-deploy": "npm run delta-sync && npm run deploy",
+    "add-user": "node scripts/add-user.js"
   },
   "bin": {
     "hs-verify": "./scripts/cli-verifier.js"

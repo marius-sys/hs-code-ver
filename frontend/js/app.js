@@ -1,6 +1,6 @@
 class HSCodeVerifier {
     constructor() {
-        this.apiBaseUrl = 'https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev';
+        this.apiBaseUrl = 'https://hs-code-verifier-api-auth.workers.dev'; // nowy worker z auth
         this.init();
     }
 
@@ -136,9 +136,6 @@ class HSCodeVerifier {
         return div.textContent || div.innerText || '';
     }
 
-    // ... reszta metod (formatInput, formatDescription, checkAPI, fetchAdditionalStats, verify, displayResult, showLoading)
-    // pozostaje bez zmian – patrz poprzednia wersja, ale uzupełniam poniżej dla kompletności
-
     formatInput(input) {
         let value = input.value.replace(/[^\d\s\-]/g, '');
         value = value.replace(/\s+/g, ' ').trim();
@@ -230,9 +227,14 @@ class HSCodeVerifier {
         }
         this.showLoading(true);
         try {
+            const token = localStorage.getItem('token');
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
             const response = await fetch(`${this.apiBaseUrl}/verify`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: headers,
                 body: JSON.stringify({ code: code })
             });
             const data = await response.json();

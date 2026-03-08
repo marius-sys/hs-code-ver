@@ -1,4 +1,5 @@
 import { syncIsztarData } from './sync.js';
+import { sign, verify } from 'jsonwebtoken';  // nowy import
 
 const RATE_LIMIT = {
   maxRequests: 20000,
@@ -11,6 +12,56 @@ let hsDatabaseCache = null;
 let cacheTimestamp = 0;
 const CACHE_TTL = 5 * 60 * 1000;
 
+// ------------------------------------------------------------
+// NOWE FUNKCJE POMOCNICZE – JWT, hashowanie, logowanie
+// ------------------------------------------------------------
+function generateToken(payload, secret, expiresIn = '7d') {
+  return sign(payload, secret, { expiresIn });
+}
+
+function verifyToken(token, secret) {
+  try {
+    return verify(token, secret);
+  } catch {
+    return null;
+  }
+}
+
+async function hashPassword(password, salt) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(salt),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(password));
+  return btoa(String.fromCharCode(...new Uint8Array(signature)))
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
+}
+
+async function logQuery(env, userId, code, ip) {
+  try {
+    const timestamp = Date.now();
+    const key = `log:${timestamp}:${userId}`;
+    const logEntry = {
+      userId,
+      code,
+      ip,
+      timestamp: new Date().toISOString()
+    };
+    await env.HS_DATABASE.put(key, JSON.stringify(logEntry));
+  } catch (error) {
+    console.error('Błąd logowania:', error);
+  }
+}
+
+// ------------------------------------------------------------
+// ISTNIEJĄCE FUNKCJE (bez zmian)
+// ------------------------------------------------------------
 function checkRateLimit(ip) {
   const today = new Date().toISOString().split('T')[0];
   const key = `${ip}_${today}`;
@@ -71,21 +122,16 @@ function formatDescription(description) {
   const parts = description.split(' → ');
   const lastIndex = parts.length - 1;
   
-  // Sprawdź czy ostatnia część to "Pozostałe"
   const isLastRemaining = parts[lastIndex].includes('Pozostałe');
   
-  // Formatuj każdą część
   const formattedParts = parts.map((part, index) => {
     let formattedPart = part;
     
-    // Pogrubienie odpowiednich części
     if (isLastRemaining) {
-      // Jeśli ostatni to "Pozostałe", pogrubiamy ostatnie dwie części
       if (index >= lastIndex - 1) {
         formattedPart = `<strong>${part}</strong>`;
       }
     } else {
-      // W przeciwnym razie tylko ostatnią część
       if (index === lastIndex) {
         formattedPart = `<strong>${part}</strong>`;
       }
@@ -94,7 +140,6 @@ function formatDescription(description) {
     return formattedPart;
   });
   
-  // Połącz z <br> zamiast →
   return formattedParts.join('<br>');
 }
 
@@ -139,22 +184,11 @@ async function checkIfControlled(code, env) {
 }
 
 function normalizeHSCode(code) {
-  // Usuń wszystkie znaki niebędące cyframi
   let cleaned = code.replace(/\D/g, '');
   
-  // Jeśli kod ma 10 cyfr i kończy się zerami, usuń końcowe zera
-  // ale zostaw co najmniej 4 cyfry
   if (cleaned.length === 10 && cleaned.endsWith('0')) {
-    // Usuń końcowe zera
     let normalized = cleaned.replace(/0+$/, '');
     
-    // Jeśli po usunięciu zer zostało mniej niż 4 cyfry, wróć do oryginału
-    if (normalized.length < 4) {
-      normalized = cleaned.substring(0, 4);
-    }
-    
-    // Ale nie skracaj poniżej długości oryginalnego kodu (jeśli ktoś wpisał np. 6 cyfr)
-    // Zachowaj minimalną długość 4 cyfr
     if (normalized.length < 4) {
       normalized = cleaned.substring(0, 4);
     }
@@ -162,12 +196,9 @@ function normalizeHSCode(code) {
     return normalized;
   }
   
-  // Dla kodów o innych długościach, jeśli kończą się zerami i mają więcej niż 4 cyfry
-  // usuń końcowe zera, ale zostaw co najmniej 4 cyfry
   if (cleaned.length > 4 && cleaned.endsWith('0')) {
     let normalized = cleaned.replace(/0+$/, '');
     
-    // Zawsze zostaw co najmniej 4 cyfry
     if (normalized.length < 4) {
       normalized = cleaned.substring(0, 4);
     }
@@ -180,7 +211,6 @@ function normalizeHSCode(code) {
 
 async function verifyHSCode(code, env) {
   try {
-    // Normalizuj kod - usuń końcowe zera dla kodów > 4 cyfr
     let cleanedCode = normalizeHSCode(code);
     
     console.log(`🔍 Weryfikacja kodu: oryginalny=${code}, znormalizowany=${cleanedCode}`);
@@ -205,22 +235,18 @@ async function verifyHSCode(code, env) {
     
     const database = await getDatabase(env);
     
-    // Sprawdź czy kod jest sankcyjny lub pod kontrolą SANEPID
     const isSanctioned = await checkIfSanctioned(cleanedCode, env);
     const isControlled = await checkIfControlled(cleanedCode, env);
     
-    // 1. Znajdź wszystkie kody, które zaczynają się od cleanedCode (w tym dokładne dopasowanie)
     const allMatchingCodes = Object.keys(database)
       .filter(k => k.startsWith(cleanedCode))
       .sort();
     
     console.log(`📊 Znaleziono ${allMatchingCodes.length} pasujących kodów dla ${cleanedCode}`);
     
-    // 2. Podziel na dokładne dopasowanie i podkody
     const exactMatch = allMatchingCodes.find(k => k === cleanedCode);
     const subCodes = allMatchingCodes.filter(k => k !== cleanedCode);
     
-    // Jeśli nie znaleziono żadnego pasującego kodu
     if (allMatchingCodes.length === 0) {
       const result = {
         success: false,
@@ -245,7 +271,6 @@ async function verifyHSCode(code, env) {
       return result;
     }
     
-    // 3. Jeśli nie ma podkodów - to jest kod końcowy
     if (subCodes.length === 0) {
       const description = database[exactMatch];
       const formattedDescription = formatDescription(description);
@@ -277,7 +302,6 @@ async function verifyHSCode(code, env) {
       return result;
     }
     
-    // 4. Jeśli jest JEDEN podkod i NIE MA dokładnego dopasowania - rozszerz do pełnego kodu
     if (subCodes.length === 1 && !exactMatch) {
       const singleCode = subCodes[0];
       const paddedCode = singleCode.padEnd(10, '0');
@@ -309,7 +333,6 @@ async function verifyHSCode(code, env) {
       return result;
     }
     
-    // 5. Jeśli jest WIELE podkodów lub (JEDEN podkod i dokładne dopasowanie) - to kod ogólny
     if (subCodes.length > 0) {
       const description = exactMatch 
         ? database[exactMatch] 
@@ -345,7 +368,6 @@ async function verifyHSCode(code, env) {
       return result;
     }
     
-    // 6. Fallback - nie powinno się zdarzyć
     return {
       success: false,
       code: cleanedCode,
@@ -388,6 +410,82 @@ async function handleCron(env, ctx) {
   return result;
 }
 
+// ------------------------------------------------------------
+// NOWE ENDPOINTY – logowanie, panel admina
+// ------------------------------------------------------------
+async function handleLogin(request, env) {
+  try {
+    const { username, password } = await request.json();
+    if (!username || !password) {
+      return Response.json({ error: 'Brak nazwy użytkownika lub hasła' }, { status: 400 });
+    }
+
+    const userData = await env.HS_DATABASE.get(`user:${username}`, 'json');
+    if (!userData) {
+      return Response.json({ error: 'Nieprawidłowe dane logowania' }, { status: 401 });
+    }
+
+    const hash = await hashPassword(password, env.JWT_SECRET + username);
+    if (hash !== userData.passwordHash) {
+      return Response.json({ error: 'Nieprawidłowe dane logowania' }, { status: 401 });
+    }
+
+    const token = generateToken(
+      { username, role: userData.role },
+      env.JWT_SECRET
+    );
+
+    return Response.json({ success: true, token, role: userData.role });
+  } catch (error) {
+    return Response.json({ error: 'Błąd serwera' }, { status: 500 });
+  }
+}
+
+async function handleAdminLogs(request, env, user) {
+  if (user.role !== 'admin') {
+    return Response.json({ error: 'Brak uprawnień' }, { status: 403 });
+  }
+
+  try {
+    const list = await env.HS_DATABASE.list({ prefix: 'log:', limit: 200 });
+    const logs = [];
+    for (const key of list.keys) {
+      const value = await env.HS_DATABASE.get(key.name, 'json');
+      if (value) logs.push(value);
+    }
+    logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    return Response.json({ success: true, logs: logs.slice(0, 100) });
+  } catch (error) {
+    return Response.json({ error: 'Błąd pobierania logów' }, { status: 500 });
+  }
+}
+
+async function handleAdminUsers(request, env, user) {
+  if (user.role !== 'admin') {
+    return Response.json({ error: 'Brak uprawnień' }, { status: 403 });
+  }
+  try {
+    const list = await env.HS_DATABASE.list({ prefix: 'user:' });
+    const users = [];
+    for (const key of list.keys) {
+      const value = await env.HS_DATABASE.get(key.name, 'json');
+      if (value) {
+        users.push({
+          username: key.name.replace('user:', ''),
+          role: value.role,
+          createdAt: value.createdAt
+        });
+      }
+    }
+    return Response.json({ success: true, users });
+  } catch (error) {
+    return Response.json({ error: 'Błąd pobierania użytkowników' }, { status: 500 });
+  }
+}
+
+// ------------------------------------------------------------
+// GŁÓWNY OBSŁUGIWACZ FETCH
+// ------------------------------------------------------------
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -401,7 +499,18 @@ export default {
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
     }
-    
+
+    // --------------------------------------------------------
+    // NOWY ENDPOINT: logowanie (publiczne)
+    // --------------------------------------------------------
+    if (url.pathname === '/login' && request.method === 'POST') {
+      const result = await handleLogin(request, env);
+      return Response.json(result, { headers: corsHeaders });
+    }
+
+    // --------------------------------------------------------
+    // ENDPOINTY PUBLICZNE (bez zmian)
+    // --------------------------------------------------------
     if (url.pathname === '/cron/sync' && request.method === 'POST') {
       const cronSecret = request.headers.get('X-Cron-Secret');
       if (!env.CRON_SECRET || cronSecret !== env.CRON_SECRET) {
@@ -419,7 +528,7 @@ export default {
         timestamp: new Date().toISOString()
       }, { headers: corsHeaders });
     }
-    
+
     if (url.pathname === '/health' && request.method === 'GET') {
       try {
         const hasDatabase = !!env.HS_DATABASE;
@@ -451,8 +560,8 @@ export default {
         return Response.json({
           status: 'healthy',
           version: env.VERSION,
-          worker: 'hs-code-verifier-api',
-          url: 'https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev',
+          worker: 'hs-code-verifier-api-auth',
+          url: 'https://hs-code-verifier-api-auth.workers.dev',
           database: {
             hasBinding: hasDatabase,
             lastSync: metadata ? metadata.lastSync : 'Nigdy',
@@ -475,47 +584,7 @@ export default {
         }, { status: 500, headers: corsHeaders });
       }
     }
-    
-    if (url.pathname === '/verify' && request.method === 'POST') {
-      const clientIP = getClientIP(request);
-      if (!checkRateLimit(clientIP)) {
-        return Response.json(
-          { error: RATE_LIMIT.message },
-          { status: 429, headers: corsHeaders }
-        );
-      }
-      
-      try {
-        const body = await request.json();
-        const { code } = body;
-        
-        if (!code) {
-          return Response.json(
-            { error: 'Brak kodu HS' },
-            { status: 400, headers: corsHeaders }
-          );
-        }
-        
-        if (!env.HS_DATABASE) {
-          return Response.json({
-            success: false,
-            code: code,
-            description: 'Baza danych niedostępna',
-            error: 'DATABASE_UNAVAILABLE'
-          }, { headers: corsHeaders });
-        }
-        
-        const result = await verifyHSCode(code, env);
-        return Response.json(result, { headers: corsHeaders });
-        
-      } catch (error) {
-        return Response.json(
-          { error: 'Nieprawidłowy format danych' },
-          { status: 400, headers: corsHeaders }
-        );
-      }
-    }
-    
+
     if (url.pathname === '/stats' && request.method === 'GET') {
       try {
         const hasDatabase = !!env.HS_DATABASE;
@@ -549,10 +618,10 @@ export default {
         }
         
         return Response.json({
-          name: 'HS Code Verifier API v1.4.3',
+          name: 'HS Code Verifier API v1.5.0',
           version: env.VERSION,
-          worker: 'hs-code-verifier-api',
-          url: 'https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev',
+          worker: 'hs-code-verifier-api-auth',
+          url: 'https://hs-code-verifier-api-auth.workers.dev',
           database: {
             hasBinding: hasDatabase,
             lastSync: metadata ? metadata.lastSync : 'Nigdy',
@@ -580,7 +649,7 @@ export default {
         );
       }
     }
-    
+
     if (url.pathname === '/sanctions' && request.method === 'GET') {
       try {
         const hasDatabase = !!env.HS_DATABASE;
@@ -607,7 +676,7 @@ export default {
         );
       }
     }
-    
+
     if (url.pathname === '/sanctions/update' && request.method === 'POST') {
       const authToken = request.headers.get('Authorization');
       if (!env.SYNC_TOKEN || authToken !== `Bearer ${env.SYNC_TOKEN}`) {
@@ -629,10 +698,6 @@ export default {
         }
         
         const validCodes = codes.filter(code => /^\d{4}$/.test(code));
-        
-        if (validCodes.length !== codes.length) {
-          console.warn(`Niektóre kody są nieprawidłowe. Zaakceptowano ${validCodes.length} z ${codes.length}`);
-        }
         
         const data = {
           codes: validCodes,
@@ -656,7 +721,7 @@ export default {
         );
       }
     }
-    
+
     if (url.pathname === '/controlled' && request.method === 'GET') {
       try {
         const hasDatabase = !!env.HS_DATABASE;
@@ -684,7 +749,7 @@ export default {
         );
       }
     }
-    
+
     if (url.pathname === '/controlled/update' && request.method === 'POST') {
       const authToken = request.headers.get('Authorization');
       if (!env.SYNC_TOKEN || authToken !== `Bearer ${env.SYNC_TOKEN}`) {
@@ -706,10 +771,6 @@ export default {
         }
         
         const validCodes = codes.filter(code => /^\d{4}$/.test(code));
-        
-        if (validCodes.length !== codes.length) {
-          console.warn(`Niektóre kody są nieprawidłowe. Zaakceptowano ${validCodes.length} z ${codes.length}`);
-        }
         
         const data = {
           codes: validCodes,
@@ -734,21 +795,156 @@ export default {
         );
       }
     }
-    
+
+    // --------------------------------------------------------
+    // ENDPOINT WERYFIKACJI – z logowaniem (jeśli użytkownik zalogowany)
+    // --------------------------------------------------------
+    if (url.pathname === '/verify' && request.method === 'POST') {
+      const clientIP = getClientIP(request);
+      if (!checkRateLimit(clientIP)) {
+        return Response.json(
+          { error: RATE_LIMIT.message },
+          { status: 429, headers: corsHeaders }
+        );
+      }
+      
+      try {
+        const body = await request.json();
+        const { code } = body;
+        
+        if (!code) {
+          return Response.json(
+            { error: 'Brak kodu HS' },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+        
+        if (!env.HS_DATABASE) {
+          return Response.json({
+            success: false,
+            code: code,
+            description: 'Baza danych niedostępna',
+            error: 'DATABASE_UNAVAILABLE'
+          }, { headers: corsHeaders });
+        }
+        
+        const result = await verifyHSCode(code, env);
+
+        // Sprawdź token i zaloguj jeśli użytkownik istnieje
+        const authHeader = request.headers.get('Authorization');
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+          const token = authHeader.substring(7);
+          const user = verifyToken(token, env.JWT_SECRET);
+          if (user) {
+            ctx.waitUntil(logQuery(env, user.username, code, clientIP));
+          }
+        }
+        
+        return Response.json(result, { headers: corsHeaders });
+        
+      } catch (error) {
+        return Response.json(
+          { error: 'Nieprawidłowy format danych' },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
+    // --------------------------------------------------------
+    // ENDPOINTY ADMINA (wymagają tokena i roli admin)
+    // --------------------------------------------------------
+    const authHeader = request.headers.get('Authorization');
+    let user = null;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      user = verifyToken(token, env.JWT_SECRET);
+    }
+
+    if (url.pathname === '/admin/logs' && request.method === 'GET') {
+      if (!user) {
+        return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
+      }
+      const result = await handleAdminLogs(request, env, user);
+      return Response.json(result, { headers: corsHeaders });
+    }
+
+    if (url.pathname === '/admin/users' && request.method === 'GET') {
+      if (!user) {
+        return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
+      }
+      const result = await handleAdminUsers(request, env, user);
+      return Response.json(result, { headers: corsHeaders });
+    }
+
+    // --------------------------------------------------------
+    // ENDPOINTY SYNCHRONIZACJI (pozostałe)
+    // --------------------------------------------------------
+    if (url.pathname === '/api/sync' && request.method === 'POST') {
+      const authToken = request.headers.get('Authorization');
+      const expectedToken = env.SYNC_TOKEN;
+      
+      if (!expectedToken || authToken !== `Bearer ${expectedToken}`) {
+        return Response.json(
+          { error: 'Brak autoryzacji' },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      
+      ctx.waitUntil(syncIsztarData(env, ctx));
+      
+      return Response.json(
+        { 
+          success: true,
+          message: 'Synchronizacja delta rozpoczęta w tle',
+          timestamp: new Date().toISOString()
+        },
+        { headers: corsHeaders }
+      );
+    }
+
+    if (url.pathname === '/api/sync/status' && request.method === 'GET') {
+      try {
+        const metadata = await env.HS_DATABASE.get('HS_METADATA', 'json');
+        
+        return Response.json(
+          {
+            status: 'ok',
+            lastSync: metadata ? metadata.lastSync : 'Nigdy',
+            syncType: metadata ? metadata.syncType : 'unknown',
+            totalRecords: metadata ? metadata.totalRecords : 0,
+            timestamp: new Date().toISOString()
+          },
+          { headers: corsHeaders }
+        );
+      } catch (error) {
+        return Response.json(
+          { 
+            status: 'error',
+            message: error.message 
+          },
+          { status: 500, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Domyślna odpowiedź
     return Response.json({
-      name: 'HS Code Verifier API v1.4.3',
+      name: 'HS Code Verifier API v1.5.0 with Auth',
       version: env.VERSION,
       description: 'System weryfikacji kodów celnych HS z bazą ISZTAR',
-      worker: 'hs-code-verifier-api',
-      url: 'https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev',
+      worker: 'hs-code-verifier-api-auth',
+      url: 'https://hs-code-verifier-api-auth.workers.dev',
       endpoints: [
-        'GET /health - Status zdrowia systemu',
-        'POST /verify - Weryfikacja kodu HS (akceptuje formaty: 1234, 1234 56, 1234-56-78)',
-        'GET /stats - Statystyki bazy danych',
-        'GET /sanctions - Lista kodów sankcyjnych',
-        'POST /sanctions/update - Aktualizacja listy sankcji (wymaga tokenu)',
-        'GET /controlled - Lista kodów pod kontrolą SANEPID',
-        'POST /controlled/update - Aktualizacja listy kontroli SANEPID (wymaga tokenu)'
+        'POST /login - logowanie użytkownika',
+        'POST /verify - weryfikacja kodu HS (logowana jeśli token podany)',
+        'GET /health - status zdrowia systemu',
+        'GET /stats - statystyki bazy',
+        'GET /admin/logs - lista logów (admin)',
+        'GET /admin/users - lista użytkowników (admin)',
+        'GET /sanctions - lista kodów sankcyjnych',
+        'POST /sanctions/update - aktualizacja sankcji (token)',
+        'GET /controlled - lista kodów SANEPID',
+        'POST /controlled/update - aktualizacja SANEPID (token)'
       ],
       timestamp: new Date().toISOString()
     }, { headers: corsHeaders });

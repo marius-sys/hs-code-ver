@@ -1,8 +1,8 @@
-name: 🚀 Deploy HS Code Verifier v1.4.1
+name: 🚀 Deploy HS Code Verifier with Auth
 
 on:
   push:
-    branches: [ main ]
+    branches: [ feature/auth-system, main ]
   workflow_dispatch:
     inputs:
       force_deploy:
@@ -12,8 +12,8 @@ on:
 
 env:
   NODE_VERSION: '20'
-  WORKER_NAME: 'hs-code-verifier-api'
-  WORKER_URL: 'https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev'
+  WORKER_NAME: 'hs-code-verifier-api-auth'
+  WORKER_URL: 'https://hs-code-verifier-api-auth.workers.dev'
   KV_ID: 'd4e909bdc6114613ab76635fadb855b2'
 
 jobs:
@@ -73,57 +73,34 @@ jobs:
           echo "👤 Account ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
           echo ""
           echo "ℹ️  Następne kroki:"
-          echo "1. Dodaj SYNC_TOKEN i CRON_SECRET w Cloudflare Dashboard"
+          echo "1. Dodaj JWT_SECRET, SYNC_TOKEN i CRON_SECRET w Cloudflare Dashboard"
           echo "2. Uruchom synchronizację: npm run delta-sync"
           echo "3. Sprawdź: curl ${{ env.WORKER_URL }}/health"
-
-  deploy-frontend:
-    runs-on: ubuntu-latest
-    name: 🎨 Deploy Frontend (GitHub Pages)
-    needs: deploy-backend
-    permissions:
-      contents: write
-    
-    steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-
-      - name: 🔧 Update API URL in frontend
-        run: |
-          sed -i "s|https://hs-code-verifier-api-production.konto-dla-m-w-q4r.workers.dev|https://hs-code-verifier-api.konto-dla-m-w-q4r.workers.dev|g" frontend/js/app.js
-
-      - name: 🚀 Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./frontend
-          force_orphan: true
-          user_name: 'github-actions[bot]'
-          user_email: 'github-actions[bot]@users.noreply.github.com'
 
   verify-deployment:
     runs-on: ubuntu-latest
     name: ✅ Verify Deployment
-    needs: [deploy-backend, deploy-frontend]
+    needs: deploy-backend
     
     steps:
       - name: 🩺 Health check
         run: |
           echo "Sprawdzam zdrowie API..."
           sleep 10
-          curl -s ${{ env.WORKER_URL }}/health | jq .
+          curl -s ${{ env.WORKER_URL }}/health | jq . || curl -s ${{ env.WORKER_URL }}/health
           
       - name: 📊 Deployment summary
         run: |
           echo "🎉 DEPLOYMENT ZAKOŃCZONY!"
           echo ""
           echo "📋 LINKI:"
-          echo "• Frontend: https://marius-sys.github.io/hs-code-ver"
           echo "• Backend API: ${{ env.WORKER_URL }}"
+          echo "• Frontend: https://hs-code-auth.pages.dev (skonfiguruj ręcznie w Cloudflare Pages)"
           echo "• KV Namespace ID: ${{ env.KV_ID }}"
           echo "• Cloudflare Account ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
           echo ""
           echo "🔧 NASTĘPNE KROKI:"
-          echo "1. Dodaj SYNC_TOKEN i CRON_SECRET w Cloudflare Dashboard"
+          echo "1. Dodaj JWT_SECRET, SYNC_TOKEN i CRON_SECRET w Cloudflare Dashboard"
           echo "2. Uruchom: npm run delta-sync"
-          echo "3. Testuj: curl -X POST ${{ env.WORKER_URL }}/verify -H 'Content-Type: application/json' -d '{\"code\":\"0101\"}'"
+          echo "3. Dodaj pierwszego użytkownika: npm run add-user <username> <password> <role>"
+          echo "4. Testuj: curl -X POST ${{ env.WORKER_URL }}/verify -H 'Content-Type: application/json' -d '{\"code\":\"0101\"}' -H 'Authorization: Bearer <token>'"

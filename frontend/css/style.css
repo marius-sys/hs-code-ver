@@ -534,3 +534,128 @@ input::placeholder {
         padding: 12px;
     }
 }
+/* Styl dla logowania */
+.login-body {
+    background: linear-gradient(135deg, #152a5e 0%, #1a3a7a 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.login-container {
+    width: 100%;
+    max-width: 400px;
+}
+
+.login-card {
+    background: white;
+    border-radius: 16px;
+    padding: 40px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+}
+
+.login-header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.login-header .logo-image {
+    height: 60px;
+    margin-bottom: 15px;
+}
+
+.login-header h2 {
+    color: #152a5e;
+    margin-bottom: 5px;
+}
+
+.login-header p {
+    color: #666;
+}
+
+.input-group {
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+    border: 2px solid #e1e5eb;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.input-group i {
+    width: 50px;
+    text-align: center;
+    color: #152a5e;
+    font-size: 1.2rem;
+}
+
+.input-group input {
+    flex: 1;
+    border: none;
+    padding: 15px 15px 15px 0;
+    font-size: 1rem;
+}
+
+.input-group input:focus {
+    outline: none;
+}
+
+.error-message {
+    color: #dc3545;
+    margin-top: 15px;
+    text-align: center;
+    padding: 10px;
+    background: #f8d7da;
+    border-radius: 8px;
+}
+
+/* Panel admina */
+.user-info {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 20px;
+    margin-top: 20px;
+    color: white;
+}
+
+.btn-logout {
+    background: rgba(255,255,255,0.2);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.3s;
+}
+
+.btn-logout:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+.logs-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+.logs-table th {
+    background: #152a5e;
+    color: white;
+    padding: 12px;
+    text-align: left;
+}
+
+.logs-table td {
+    padding: 12px;
+    border-bottom: 1px solid #e1e5eb;
+}
+
+.logs-table tr:hover {
+    background: #f5f7fa;
+}
