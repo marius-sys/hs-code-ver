@@ -1,4 +1,4 @@
-const API_BASE_URL = 'https://hs-code-verifier-api-auth.konto-dla-m-w-q4r.workers.dev';
+// const API_BASE_URL = 'https://hs-code-verifier-api-auth.konto-dla-m-w-q4r.workers.dev';
 
 document.addEventListener('DOMContentLoaded', async () => {
     const token = localStorage.getItem('token');
