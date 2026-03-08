@@ -1,5 +1,5 @@
 // auth.js – obsługa logowania i zarządzanie tokenem
-const API_BASE_URL = 'https://hs-code-verifier-api-auth.workers.dev'; // docelowo zmienić po deployu
+const API_BASE_URL = 'hs-code-verifier-api-auth.konto-dla-m-w-q4r.workers.dev'; // docelowo zmienić po deployu
 
 document.addEventListener('DOMContentLoaded', () => {
     const loginForm = document.getElementById('loginForm');
