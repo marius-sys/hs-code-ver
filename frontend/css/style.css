@@ -638,6 +638,25 @@ input::placeholder {
     background: rgba(255,255,255,0.3);
 }
 
+.btn-home {
+    background: rgba(255,255,255,0.2);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.3s;
+    font-size: 0.9rem;
+    text-decoration: none;
+}
+
+.btn-home:hover {
+    background: rgba(255,255,255,0.3);
+}
+
 .logs-table {
     width: 100%;
     border-collapse: collapse;
